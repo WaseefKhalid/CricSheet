@@ -140,6 +140,8 @@ with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.
 
         # 6 — Store everything in session state
         _step("✅ Finalising & caching...", 0.95)
+        # Set index on match_id for fast .loc[] filtering later
+        deliveries_df = deliveries_df.set_index("match_id", drop=False)
         st.session_state.matches_df       = matches_df
         st.session_state.deliveries_df    = deliveries_df
         st.session_state.cached = {
@@ -272,12 +274,13 @@ if st.sidebar.button("🔄 Reset All Filters"):
 
 # ── Final filtered data ───────────────────────────────────────────────────────
 final_matches = filtered_matches_temp
-final_deliveries = deliveries_df[deliveries_df["match_id"].isin(final_matches["match_id"])].copy()
 
-# bat_deliveries — filtered by batting team if selected
-# bowl_deliveries — filtered by bowling team if selected
-# This ensures batting stats show only selected batting team's batters
-# and bowling stats show only selected bowling team's bowlers
+# Use match_id index for fast filtering instead of scanning all rows
+valid_match_ids = set(final_matches["match_id"].tolist())
+final_deliveries = deliveries_df[deliveries_df["match_id"].isin(valid_match_ids)]
+
+# For batting/bowling team filters, use precomputed player lists from cache
+# instead of scanning delivery rows — just filter the cached stats by player name
 if eff_batting_teams:
     bat_deliveries = final_deliveries[final_deliveries["batting_team"].isin(eff_batting_teams)]
 else:
@@ -287,6 +290,10 @@ if eff_bowling_teams:
     bowl_deliveries = final_deliveries[final_deliveries["bowling_team"].isin(eff_bowling_teams)]
 else:
     bowl_deliveries = final_deliveries
+
+# Precompute valid player sets once — used by all tabs below
+valid_bat_players  = set(bat_deliveries["striker"].dropna().unique()) if eff_batting_teams else None
+valid_bowl_players = set(bowl_deliveries["bowler"].dropna().unique()) if eff_bowling_teams else None
 
 # ── KPI Row ───────────────────────────────────────────────────────────────────
 st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
@@ -361,9 +368,8 @@ with tab1:
         batting_base = batting_base[batting_base["player"].isin(valid_players_pos)]
 
     # Apply batting team filter
-    if eff_batting_teams:
-        valid_players = bat_deliveries["striker"].dropna().unique()
-        batting_base = batting_base[batting_base["player"].isin(valid_players)]
+    if valid_bat_players is not None:
+        batting_base = batting_base[batting_base["player"].isin(valid_bat_players)]
 
     batting = batting_base[batting_base["innings"] >= min_innings].copy()
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
@@ -441,13 +447,12 @@ with tab2:
 
     # Apply over filter — filter by valid bowlers in those overs
     if use_over_filter and selected_overs:
-        valid_bowlers_over = bowl_del["bowler"].dropna().unique()
+        valid_bowlers_over = set(bowl_del["bowler"].dropna().unique())
         bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers_over)]
 
     # Apply bowling team filter
-    if eff_bowling_teams:
-        valid_bowlers = bowl_deliveries["bowler"].dropna().unique()
-        bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers)]
+    if valid_bowl_players is not None:
+        bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
 
     bowling = bowling_base[bowling_base["overs"] >= min_overs].copy()
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
@@ -575,17 +580,15 @@ with tab5:
 
     st.markdown('<div class="section-header">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
     bat_chart = _cache["batting_all"].copy()
-    if selected_batting_teams:
-        valid_p = bat_deliveries["striker"].dropna().unique()
-        bat_chart = bat_chart[bat_chart["player"].isin(valid_p)]
+    if valid_bat_players is not None:
+        bat_chart = bat_chart[bat_chart["player"].isin(valid_bat_players)]
     bat_chart = bat_chart.sort_values("runs", ascending=False).head(10)
     plot_top_batsmen(bat_chart, x="player", y="runs", title="Top 10 Run Scorers")
 
     st.markdown('<div class="section-header">🎳 Top 10 Wicket Takers</div>', unsafe_allow_html=True)
     bowl_chart = _cache["bowling_all"].copy()
-    if selected_bowling_teams:
-        valid_b = bowl_deliveries["bowler"].dropna().unique()
-        bowl_chart = bowl_chart[bowl_chart["player"].isin(valid_b)]
+    if valid_bowl_players is not None:
+        bowl_chart = bowl_chart[bowl_chart["player"].isin(valid_bowl_players)]
     bowl_chart = bowl_chart.sort_values("wickets", ascending=False).head(10)
     plot_top_bowlers(bowl_chart)
 
@@ -602,9 +605,9 @@ with tab6:
 
     # Filter player list to selected main team if active
     if selected_main_team:
-        team_players = set(
-            final_deliveries["striker"].dropna().unique().tolist() +
-            final_deliveries["bowler"].dropna().unique().tolist()
+        team_players = (
+            (valid_bat_players or set()) |
+            (valid_bowl_players or set(final_deliveries["bowler"].dropna().unique()))
         )
         all_players = sorted([p for p in all_profiles.keys() if p in team_players])
     else:
