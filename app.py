@@ -194,29 +194,47 @@ filter_opts = get_filter_options(matches_df)
 selected_seasons = st.sidebar.multiselect(
     "📅 Season", options=filter_opts["seasons"], default=[]
 )
-
-# Filter matches progressively for chained options
 filtered_matches_temp = apply_filters(matches_df, {"season": selected_seasons})
 opts_after_season = get_filter_options(filtered_matches_temp)
 
-# Batting Team (for batting stats)
-st.sidebar.markdown("#### 🏏 Batting Stats Filters")
-selected_batting_teams = st.sidebar.multiselect(
-    "🏏 Batting Team", options=opts_after_season["teams"], default=[],
-    help="Show batting stats only for this team"
+# ── MAIN TEAM FILTER — filters everything at once ─────────────────────────
+st.sidebar.markdown("#### 🏆 Team")
+selected_main_team = st.sidebar.multiselect(
+    "🏆 Team (All Stats)",
+    options=opts_after_season["teams"],
+    default=[],
+    help="Filters ALL tabs — batting, bowling, matches, team stats, player profiles",
 )
+if selected_main_team:
+    filtered_matches_temp = apply_filters(filtered_matches_temp, {"team": selected_main_team})
 
-# Bowling Team (for bowling stats)
-st.sidebar.markdown("#### 🎳 Bowling Stats Filters")
-selected_bowling_teams = st.sidebar.multiselect(
-    "🎳 Bowling Team", options=opts_after_season["teams"], default=[],
-    help="Show bowling stats only for this team"
-)
+opts_after_main_team = get_filter_options(filtered_matches_temp)
 
-# Match filters (affects which matches are in scope for both)
-# Use combined team filter for match-level filtering
-selected_teams = list(set(selected_batting_teams + selected_bowling_teams))
-filtered_matches_temp = apply_filters(filtered_matches_temp, {"team": selected_teams})
+# ── ADVANCED: separate batting/bowling team overrides ─────────────────────
+with st.sidebar.expander("⚙️ Advanced Team Filters", expanded=False):
+    st.caption("Override main team filter for specific stat tabs")
+    selected_batting_teams = st.multiselect(
+        "🏏 Batting Team (override)",
+        options=opts_after_main_team["teams"], default=[],
+        help="Show batting stats only for this team",
+    )
+    selected_bowling_teams = st.multiselect(
+        "🎳 Bowling Team (override)",
+        options=opts_after_main_team["teams"], default=[],
+        help="Show bowling stats only for this team",
+    )
+
+# Effective team filters: advanced overrides take priority, else use main team
+eff_batting_teams = selected_batting_teams if selected_batting_teams else selected_main_team
+eff_bowling_teams = selected_bowling_teams if selected_bowling_teams else selected_main_team
+
+selected_teams = list(set(eff_batting_teams + eff_bowling_teams))
+if selected_teams:
+    filtered_matches_temp = apply_filters(
+        apply_filters(matches_df, {"season": selected_seasons}),
+        {"team": selected_teams}
+    )
+
 opts_after_team = get_filter_options(filtered_matches_temp)
 
 st.sidebar.markdown("#### 🔍 Match Filters")
@@ -260,13 +278,13 @@ final_deliveries = deliveries_df[deliveries_df["match_id"].isin(final_matches["m
 # bowl_deliveries — filtered by bowling team if selected
 # This ensures batting stats show only selected batting team's batters
 # and bowling stats show only selected bowling team's bowlers
-if selected_batting_teams:
-    bat_deliveries = final_deliveries[final_deliveries["batting_team"].isin(selected_batting_teams)]
+if eff_batting_teams:
+    bat_deliveries = final_deliveries[final_deliveries["batting_team"].isin(eff_batting_teams)]
 else:
     bat_deliveries = final_deliveries
 
-if selected_bowling_teams:
-    bowl_deliveries = final_deliveries[final_deliveries["bowling_team"].isin(selected_bowling_teams)]
+if eff_bowling_teams:
+    bowl_deliveries = final_deliveries[final_deliveries["bowling_team"].isin(eff_bowling_teams)]
 else:
     bowl_deliveries = final_deliveries
 
@@ -343,7 +361,7 @@ with tab1:
         batting_base = batting_base[batting_base["player"].isin(valid_players_pos)]
 
     # Apply batting team filter
-    if selected_batting_teams:
+    if eff_batting_teams:
         valid_players = bat_deliveries["striker"].dropna().unique()
         batting_base = batting_base[batting_base["player"].isin(valid_players)]
 
@@ -427,7 +445,7 @@ with tab2:
         bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers_over)]
 
     # Apply bowling team filter
-    if selected_bowling_teams:
+    if eff_bowling_teams:
         valid_bowlers = bowl_deliveries["bowler"].dropna().unique()
         bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers)]
 
@@ -582,7 +600,15 @@ with tab6:
     # Instant — loaded from cache computed at upload time
     all_profiles = _cache["all_profiles"]
 
-    all_players = sorted(all_profiles.keys())
+    # Filter player list to selected main team if active
+    if selected_main_team:
+        team_players = set(
+            final_deliveries["striker"].dropna().unique().tolist() +
+            final_deliveries["bowler"].dropna().unique().tolist()
+        )
+        all_players = sorted([p for p in all_profiles.keys() if p in team_players])
+    else:
+        all_players = sorted(all_profiles.keys())
 
     if not all_players:
         st.info("No player data available with current filters.")
