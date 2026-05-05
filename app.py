@@ -21,7 +21,7 @@ from components.charts import (
 )
 
 st.set_page_config(
-    page_title="PSL Cricket Analytics",
+    page_title="Waseef Analytics Portal",
     page_icon="🏏",
     layout="wide",
     initial_sidebar_state="expanded",
