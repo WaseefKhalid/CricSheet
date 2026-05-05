@@ -755,17 +755,13 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting Statistics</div>', unsafe_allow_html=True)
 
-    st.markdown('<div style="background:linear-gradient(135deg,#0d1f2d 0%,#0a1628 100%);border:1px solid #1a3550;border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.25);">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Minimum Innings</div>', unsafe_allow_html=True)
-        min_innings = st.number_input("", min_value=1, value=3, step=1, key="min_inn", label_visibility="collapsed")
+        min_innings = st.number_input("Min Innings", min_value=1, value=3, step=1, key="min_inn")
     with col2:
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Sort By</div>', unsafe_allow_html=True)
-        sort_by_bat = st.selectbox("", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"], key="sort_bat", label_visibility="collapsed")
+        sort_by_bat = st.selectbox("Sort By", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"], key="sort_bat")
     with col3:
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Batting Position Filter</div>', unsafe_allow_html=True)
-        use_pos_filter = st.toggle("🔢 Enable Position Filter", value=False)
+        use_pos_filter = st.toggle("🔢 Filter by Batting Position", value=False)
         if use_pos_filter:
             selected_positions = st.multiselect(
                 "Position(s)",
@@ -775,7 +771,6 @@ with tab1:
             )
         else:
             selected_positions = []
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # Compute batting position: rank of first ball faced per innings per match
     bat_del = bat_deliveries.reset_index(drop=True).copy()
@@ -837,16 +832,12 @@ with tab1:
 with tab2:
     st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Bowling Statistics</div>', unsafe_allow_html=True)
 
-    st.markdown('<div style="background:linear-gradient(135deg,#0d1f2d 0%,#0a1628 100%);border:1px solid #1a3550;border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.25);">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Minimum Overs</div>', unsafe_allow_html=True)
-        min_overs = st.number_input("", min_value=1, value=5, step=1, key="min_ovs", label_visibility="collapsed")
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;margin-top:0.5rem;">Sort By</div>', unsafe_allow_html=True)
-        sort_by_bowl = st.selectbox("", ["wickets", "economy", "average", "bowling_sr", "overs"], key="sort_bowl", label_visibility="collapsed")
+        min_overs = st.number_input("Min Overs", min_value=1, value=5, step=1, key="min_ovs")
+        sort_by_bowl = st.selectbox("Sort By", ["wickets", "economy", "average", "bowling_sr", "overs"], key="sort_bowl")
     with col2:
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Over Phase Filter</div>', unsafe_allow_html=True)
-        use_over_filter = st.toggle("🎯 Enable Over Filter", value=False)
+        use_over_filter = st.toggle("🎯 Filter by Over Number", value=False)
         if use_over_filter:
             # Detect max overs from data
             max_over = 20  # default T20
