@@ -53,370 +53,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
+# ── Minimal CSS — only what Streamlit reliably supports ──────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
-
-    /* ── Global ── */
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background: #080b12; }
-
-    /* ── Sidebar ── */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0d1117 0%, #0a0e1a 100%);
-        border-right: 1px solid #1a2332;
-    }
-    section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
-    section[data-testid="stSidebar"] .stMarkdown h2 {
-        color: #58a6ff !important;
-        font-size: 0.85rem !important;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        font-weight: 700 !important;
-    }
-
-    /* ── Hero Header ── */
-    .hero-wrapper {
-        background: linear-gradient(135deg, #0d1117 0%, #0f1923 50%, #0d1117 100%);
-        border-bottom: 1px solid #1a2332;
-        padding: 2.5rem 2rem 1.5rem 2rem;
-        text-align: center;
-        margin-bottom: 1.5rem;
-        position: relative;
-        overflow: hidden;
-    }
-    .hero-wrapper::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(ellipse at center, rgba(29,185,84,0.06) 0%, transparent 60%);
-        pointer-events: none;
-    }
-    .hero-title {
-        font-size: 3rem;
-        font-weight: 900;
-        background: linear-gradient(135deg, #1DB954 0%, #00d4ff 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        letter-spacing: -1px;
-        line-height: 1.1;
-        margin-bottom: 0.5rem;
-    }
-    .hero-sub {
-        color: #8b949e;
-        font-size: 0.95rem;
-        font-weight: 400;
-        margin-bottom: 0.8rem;
-    }
-    .hero-badge {
-        display: inline-block;
-        background: rgba(29,185,84,0.1);
-        border: 1px solid rgba(29,185,84,0.3);
-        border-radius: 20px;
-        padding: 0.3rem 1rem;
-        font-size: 0.85rem;
-        color: #1DB954;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-    }
-    .linkedin-link {
-        color: #58a6ff !important;
-        text-decoration: none;
-        font-size: 0.85rem;
-        font-weight: 500;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        transition: color 0.2s;
-    }
-
-    /* ── KPI Cards ── */
-    div[data-testid="metric-container"] {
-        background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
-        border: 1px solid #1a3550;
-        border-radius: 12px;
-        padding: 1rem 1.2rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    div[data-testid="metric-container"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 30px rgba(29,185,84,0.15);
-        border-color: rgba(29,185,84,0.3);
-    }
-    div[data-testid="metric-container"] label {
-        color: #8b949e !important;
-        font-size: 0.75rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 600 !important;
-    }
-    div[data-testid="metric-container"] [data-testid="stMetricValue"] {
-        color: #ffffff !important;
-        font-size: 1.9rem !important;
-        font-weight: 800 !important;
-    }
-
-    /* ── Section Headers ── */
-    .section-header {
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: #ffffff;
-        padding: 0.6rem 0 0.6rem 1rem;
-        margin: 1.8rem 0 1rem 0;
-        border-left: 3px solid #1DB954;
-        background: linear-gradient(90deg, rgba(29,185,84,0.08) 0%, transparent 100%);
-        border-radius: 0 8px 8px 0;
-    }
-
-    /* ── Tabs ── */
-    .stTabs [data-baseweb="tab-list"] {
-        background: #0d1117;
-        border-bottom: 1px solid #1a2332;
-        gap: 0;
-        padding: 0;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background: transparent;
-        color: #8b949e;
-        font-weight: 600;
-        font-size: 0.85rem;
-        padding: 0.75rem 1.2rem;
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s;
-        letter-spacing: 0.3px;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #1DB954 !important;
-        border-bottom: 2px solid #1DB954 !important;
-        background: rgba(29,185,84,0.05) !important;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        color: #ffffff !important;
-        background: rgba(255,255,255,0.04) !important;
-    }
-
-    /* ── DataFrames ── */
-    div[data-testid="stDataFrame"] {
-        border-radius: 10px;
-        border: 1px solid #1a2332;
-        overflow: hidden;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    }
-
-    /* ── Buttons ── */
-    .stButton > button {
-        background: linear-gradient(135deg, #1DB954 0%, #17a349 100%);
-        color: #000000;
-        font-weight: 700;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 1.2rem;
-        font-size: 0.9rem;
-        transition: all 0.2s;
-        box-shadow: 0 4px 15px rgba(29,185,84,0.3);
-    }
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 20px rgba(29,185,84,0.5);
-        background: linear-gradient(135deg, #22d160 0%, #1DB954 100%);
-    }
-
-    /* ── Expanders ── */
-    .streamlit-expanderHeader {
-        background: #0d1f2d !important;
-        border: 1px solid #1a3550 !important;
-        border-radius: 8px !important;
-        color: #c9d1d9 !important;
-        font-weight: 600 !important;
-    }
-
-    /* ── Selectboxes & Multiselects ── */
-    .stSelectbox > div > div,
-    .stMultiSelect > div > div {
-        background: #0d1f2d !important;
-        border: 1px solid #1a3550 !important;
-        border-radius: 8px !important;
-        color: #c9d1d9 !important;
-    }
-
-    /* ── Progress bar ── */
-    .stProgress > div > div > div > div {
-        background: linear-gradient(90deg, #1DB954, #00d4ff) !important;
-        border-radius: 4px;
-    }
-
-    /* ── Progress label ── */
-    .progress-label {
-        font-size: 0.95rem;
-        color: #c9d1d9;
-        font-weight: 500;
-        padding: 0.4rem 0;
-    }
-
-    /* ── Toggle ── */
-    .stToggle label { color: #c9d1d9 !important; }
-
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0d1117; }
-    ::-webkit-scrollbar-thumb { background: #1a3550; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #1DB954; }
-
-    /* ── Hide Streamlit branding ── */
-    #MainMenu, footer, header { visibility: hidden; }
-    .block-container { padding-top: 0 !important; max-width: 100% !important; }
-
-    /* ── Filter Panel ── */
-    .filter-panel {
-        background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
-        border: 1px solid #1a3550;
-        border-radius: 12px;
-        padding: 1.2rem 1.4rem;
-        margin-bottom: 1.2rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-    }
-    .filter-label {
-        font-size: 0.72rem;
-        font-weight: 700;
-        color: #8b949e;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-bottom: 0.3rem;
-    }
-
-    /* ── Stat Cards Row ── */
-    .stat-row {
-        display: flex;
-        gap: 0.8rem;
-        margin-bottom: 1.2rem;
-        flex-wrap: wrap;
-    }
-    .stat-card {
-        flex: 1;
-        min-width: 100px;
-        background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
-        border: 1px solid #1a3550;
-        border-radius: 10px;
-        padding: 0.9rem 1rem;
-        text-align: center;
-    }
-    .stat-card-val {
-        font-size: 1.6rem;
-        font-weight: 800;
-        color: #ffffff;
-        line-height: 1.1;
-    }
-    .stat-card-label {
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: #8b949e;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-top: 0.2rem;
-    }
-    .stat-card-accent { border-top: 2px solid #1DB954; }
-    .stat-card-accent2 { border-top: 2px solid #00d4ff; }
-    .stat-card-accent3 { border-top: 2px solid #f59e0b; }
-
-    /* ── Table Header ── */
-    .table-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 0.8rem;
-    }
-    .table-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #ffffff;
-    }
-    .table-count {
-        font-size: 0.78rem;
-        color: #8b949e;
-        background: #1a2332;
-        padding: 0.2rem 0.6rem;
-        border-radius: 10px;
-    }
-
-    /* ── Number inputs ── */
-    .stNumberInput > div > div > input {
-        background: #0d1f2d !important;
-        border: 1px solid #1a3550 !important;
-        color: #ffffff !important;
-        border-radius: 8px !important;
-    }
-
-    /* ── Caption ── */
-    .stCaption { color: #1DB954 !important; font-weight: 500 !important; }
-
-    /* ── Download button ── */
-    .stDownloadButton > button {
-        background: transparent !important;
-        border: 1px solid #1a3550 !important;
-        color: #8b949e !important;
-        font-size: 0.82rem !important;
-        box-shadow: none !important;
-    }
-    .stDownloadButton > button:hover {
-        border-color: #1DB954 !important;
-        color: #1DB954 !important;
-        transform: none !important;
-        box-shadow: none !important;
-    }
-
-    /* ── Sidebar labels ── */
-    .stSidebar .stMarkdown h4 {
-        color: #58a6ff !important;
-        font-size: 0.75rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-top: 1rem !important;
-    }
-
-    /* ── Radio buttons ── */
-    .stRadio label { color: #c9d1d9 !important; font-size: 0.88rem !important; }
-    .stRadio [data-testid="stMarkdownContainer"] p { color: #8b949e !important; }
-
-    /* ── Success/warning/error ── */
-    .stSuccess { background: rgba(29,185,84,0.1) !important; border: 1px solid rgba(29,185,84,0.3) !important; border-radius: 8px !important; }
-    .stWarning { background: rgba(245,158,11,0.1) !important; border: 1px solid rgba(245,158,11,0.3) !important; border-radius: 8px !important; }
-
-    /* ── Info box ── */
-    .stInfo { background: rgba(0,212,255,0.08) !important; border: 1px solid rgba(0,212,255,0.2) !important; border-radius: 8px !important; }
+    #MainMenu, footer { visibility: hidden; }
+    .block-container { padding-top: 1rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 _active = st.session_state.get("active_league")
-_badge  = f'<span style="display:inline-block;background:rgba(29,185,84,0.15);border:1px solid rgba(29,185,84,0.4);border-radius:20px;padding:0.25rem 1rem;font-size:0.82rem;color:#1DB954;font-weight:700;letter-spacing:0.5px;margin-bottom:0.6rem;">📊 {_active}</span>' if _active else ''
 
-st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#0f1923 50%,#0d1117 100%);
-            border-bottom:1px solid #1a2332;padding:2.5rem 2rem 1.8rem 2rem;
-            text-align:center;margin-bottom:0;">
-    {_badge}
-    <div style="font-size:2.8rem;font-weight:900;
-                background:linear-gradient(135deg,#1DB954 0%,#00d4ff 100%);
-                -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-                background-clip:text;letter-spacing:-1px;line-height:1.1;margin-bottom:0.4rem;">
-        🏏 Waseef Analytical Portal
-    </div>
-    <div style="color:#8b949e;font-size:0.95rem;font-weight:400;margin-bottom:0.8rem;">
-        Transforming ball-by-ball cricket data into deep insights
-    </div>
-    <a href="https://www.linkedin.com/in/waseef-khalid-khan-366951237"
-       target="_blank"
-       style="color:#58a6ff;text-decoration:none;font-size:0.85rem;font-weight:600;">
-       🔗 Connect on LinkedIn — Waseef Khalid Khan
-    </a>
-</div>
-""", unsafe_allow_html=True)
+st.title("🏏 Waseef Analytical Portal")
+if _active:
+    st.caption(f"📊 Currently viewing: **{_active}**")
+else:
+    st.caption("Transforming ball-by-ball cricket data into deep insights")
+st.markdown("🔗 [Connect on LinkedIn — Waseef Khalid Khan](https://www.linkedin.com/in/waseef-khalid-khan-366951237)")
+st.divider()
 
 # ── Session State ─────────────────────────────────────────────────────────────
 if "matches_df" not in st.session_state:
@@ -728,7 +382,7 @@ if selected_main_team:
     valid_team_players = _bat_p | _bowl_p
 
 # ── KPI Row ───────────────────────────────────────────────────────────────────
-st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">📊 Overview</div>', unsafe_allow_html=True)
+st.subheader("📊 Overview")
 
 k1, k2, k3, k4, k5 = st.columns(5)
 k1.metric("🏏 Matches", len(final_matches))
@@ -753,7 +407,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # TAB 1 — BATTING
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting Statistics</div>', unsafe_allow_html=True)
+    st.subheader("🏏 Batting Statistics")
 
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
@@ -821,7 +475,7 @@ with tab1:
 
     col_th, col_dl = st.columns([6,1])
     with col_th:
-        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.8rem;"><span style="font-size:1rem;font-weight:700;color:#ffffff;">Batters</span><span style="font-size:0.78rem;color:#8b949e;background:#1a2332;padding:0.2rem 0.6rem;border-radius:10px;">{len(batting)} players</span></div>', unsafe_allow_html=True)
+        st.markdown(f"**Batters** — {len(batting)} players")
     with col_dl:
         st.download_button("⬇️ CSV", batting.to_csv(index=False), file_name="batting_stats.csv", mime="text/csv")
     st.dataframe(batting, use_container_width=True, height=500)
@@ -830,7 +484,7 @@ with tab1:
 # TAB 2 — BOWLING
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Bowling Statistics</div>', unsafe_allow_html=True)
+    st.subheader("🎳 Bowling Statistics")
 
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
@@ -902,7 +556,7 @@ with tab2:
 
     col_th, col_dl = st.columns([6,1])
     with col_th:
-        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.8rem;"><span style="font-size:1rem;font-weight:700;color:#ffffff;">Bowlers</span><span style="font-size:0.78rem;color:#8b949e;background:#1a2332;padding:0.2rem 0.6rem;border-radius:10px;">{len(bowling)} players</span></div>', unsafe_allow_html=True)
+        st.markdown(f"**Bowlers** — {len(bowling)} players")
     with col_dl:
         st.download_button("⬇️ CSV", bowling.to_csv(index=False), file_name="bowling_stats.csv", mime="text/csv")
     st.dataframe(bowling, use_container_width=True, height=500)
@@ -911,14 +565,14 @@ with tab2:
 # TAB 3 — MATCH RESULTS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">📋 Match Results</div>', unsafe_allow_html=True)
+    st.subheader("📋 Match Results")
 
     # Slice cached match stats by current filter
     match_stats = _cache["match_stats"]
     match_stats = match_stats[match_stats["match_id"].isin(final_matches["match_id"])]
     st.dataframe(match_stats, use_container_width=True, height=500)
 
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🥇 Player of the Match</div>', unsafe_allow_html=True)
+    st.subheader("🥇 Player of the Match")
 
     # Build POM from filtered matches (not full cache — respects current filters)
     filtered_match_ids = set(final_matches["match_id"].tolist())
@@ -982,7 +636,7 @@ with tab3:
 # TAB 4 — TEAM STATS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏆 Team Performance</div>', unsafe_allow_html=True)
+    st.subheader("🏆 Team Performance")
 
     # Filter cached team stats to teams in current match filter
     active_teams = set()
@@ -993,7 +647,7 @@ with tab4:
         team_stats = team_stats[team_stats["team"].isin(active_teams)]
     st.dataframe(team_stats, use_container_width=True, height=400)
 
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting First vs Batting Second</div>', unsafe_allow_html=True)
+    st.subheader("🏏 Batting First vs Batting Second")
     bat_order = _cache["bat_order_stats"]
     if active_teams:
         bat_order = bat_order[bat_order["team"].isin(active_teams)]
@@ -1035,7 +689,7 @@ with tab4:
                                paper_bgcolor="rgba(0,0,0,0)", font_color="white", showlegend=True)
             st.plotly_chart(fig2, use_container_width=True)
 
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🪙 Toss Analysis</div>', unsafe_allow_html=True)
+    st.subheader("🪙 Toss Analysis")
     toss = _cache["toss_stats"]
     if active_teams:
         toss = toss[toss["toss_winner"].isin(active_teams)]
@@ -1052,7 +706,7 @@ with tab4:
 # TAB 5 — CHARTS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab5:
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">📈 Visual Analytics</div>', unsafe_allow_html=True)
+    st.subheader("📈 Visual Analytics")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1060,14 +714,14 @@ with tab5:
     with col2:
         plot_wickets_per_season(final_deliveries, final_matches)
 
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
+    st.subheader("🏏 Top 10 Run Scorers")
     bat_chart = _cache["batting_all"].copy()
     if valid_bat_players is not None:
         bat_chart = bat_chart[bat_chart["player"].isin(valid_bat_players)]
     bat_chart = bat_chart.sort_values("runs", ascending=False).head(10)
     plot_top_batsmen(bat_chart, x="player", y="runs", title="Top 10 Run Scorers")
 
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Top 10 Wicket Takers</div>', unsafe_allow_html=True)
+    st.subheader("🎳 Top 10 Wicket Takers")
     bowl_chart = _cache["bowling_all"].copy()
     if valid_bowl_players is not None:
         bowl_chart = bowl_chart[bowl_chart["player"].isin(valid_bowl_players)]
@@ -1078,7 +732,7 @@ with tab5:
 # TAB 6 — PLAYER PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
 with tab6:
-    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">👤 Player Profile</div>', unsafe_allow_html=True)
+    st.subheader("👤 Player Profile")
 
     # Precompute ALL player profiles once — cached by data size so recomputes
     # only when filters change. Individual lookups are then instant (dict key).
@@ -1125,7 +779,7 @@ with tab6:
 
             # ── BATTING SECTION ───────────────────────────────────────────────
             if show_role in ("Both", "Batting Only"):
-                st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting</div>', unsafe_allow_html=True)
+                st.subheader("🏏 Batting")
 
                 if bat:
                     # KPIs
@@ -1192,7 +846,7 @@ with tab6:
 
             # ── BOWLING SECTION ───────────────────────────────────────────────
             if show_role in ("Both", "Bowling Only"):
-                st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Bowling</div>', unsafe_allow_html=True)
+                st.subheader("🎳 Bowling")
 
                 if bowl:
                     c1, c2, c3, c4, c5 = st.columns(5)
@@ -1249,7 +903,7 @@ with tab6:
                     st.info(f"{selected_player} has no bowling records in the selected data.")
 
             # ── MAN OF MATCH SECTION ──────────────────────────────────────────
-            st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏅 Player of the Match</div>', unsafe_allow_html=True)
+            st.subheader("🏅 Player of the Match")
 
             if mom_total == 0:
                 st.info(f"{selected_player} has no Player of the Match awards in the selected data.")
