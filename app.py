@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import time
 from utils.data_loader import load_data_from_zip
 from utils.filters import apply_filters, get_filter_options
 from utils.stats import (
@@ -22,7 +23,7 @@ from components.charts import (
 )
 
 st.set_page_config(
-    page_title="PSL Cricket Analytics",
+    page_title="Waseef Analytical Portal",
     page_icon="🏏",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -32,11 +33,22 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
+        font-size: 2.6rem;
+        font-weight: 800;
         color: #1DB954;
         text-align: center;
-        padding: 1rem 0;
+        padding: 0.8rem 0 0.2rem 0;
+        letter-spacing: 1px;
+    }
+    .sub-header {
+        text-align: center;
+        color: #a0aec0;
+        font-size: 0.95rem;
+        margin-bottom: 0.3rem;
+    }
+    .linkedin-bar {
+        text-align: center;
+        margin-bottom: 1rem;
     }
     .metric-card {
         background: #1e1e2e;
@@ -53,39 +65,99 @@ st.markdown("""
         padding-bottom: 0.3rem;
         margin: 1.5rem 0 1rem 0;
     }
+    .progress-label {
+        font-size: 0.9rem;
+        color: #a0aec0;
+        margin-bottom: 4px;
+    }
     div[data-testid="stDataFrame"] { border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
+
+# ── Header ────────────────────────────────────────────────────────────────────
+st.markdown('<div class="main-header">🏏 Waseef Analytical Portal</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="sub-header">Built by a passionate cricket fan & data enthusiast · '    'Transforming ball-by-ball cricket data into deep insights</div>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<div class="linkedin-bar">'    '<a href="https://www.linkedin.com/in/waseef-khalid-khan-366951237" target="_blank" '    'style="color:#0077b5;text-decoration:none;font-weight:600;font-size:0.95rem;">'    '🔗 Connect on LinkedIn — Waseef Khalid Khan</a></div>',
+    unsafe_allow_html=True,
+)
+st.markdown("---")
 
 # ── Session State ─────────────────────────────────────────────────────────────
 if "matches_df" not in st.session_state:
     st.session_state.matches_df = None
 if "deliveries_df" not in st.session_state:
     st.session_state.deliveries_df = None
-
-# ── Header ────────────────────────────────────────────────────────────────────
-st.markdown('<div class="main-header">🏏 PSL Cricket Analytics Portal</div>', unsafe_allow_html=True)
+if "all_stats_cache" not in st.session_state:
+    st.session_state.all_stats_cache = None
 
 # ── File Upload ───────────────────────────────────────────────────────────────
 with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.session_state.matches_df is None):
     uploaded_file = st.file_uploader(
-        "Upload your PSL CSV zip file",
+        "Upload your Cricket CSV zip file",
         type=["zip"],
         help="Upload the ZIP folder containing all match CSVs and info CSVs",
     )
     if uploaded_file:
-        with st.spinner("⏳ Parsing all CSV files... this may take a moment"):
-            matches_df, deliveries_df = load_data_from_zip(uploaded_file)
-            st.session_state.matches_df = matches_df
-            st.session_state.deliveries_df = deliveries_df
-        st.success(f"✅ Loaded {len(matches_df)} matches and {len(deliveries_df):,} deliveries!")
+        st.markdown("### ⏳ Loading & Computing All Stats...")
+        steps = [
+            ("📂 Parsing CSV files",         0.15),
+            ("🏏 Building match index",       0.25),
+            ("📊 Computing batting stats",    0.45),
+            ("🎳 Computing bowling stats",    0.60),
+            ("👤 Building player profiles",  0.80),
+            ("🏆 Computing team stats",       0.90),
+            ("✅ Finalising database",        1.00),
+        ]
+        progress_bar = st.progress(0)
+        status_text  = st.empty()
+
+        # Step 1 — parse CSVs
+        status_text.markdown(f'<div class="progress-label">{steps[0][0]}</div>', unsafe_allow_html=True)
+        progress_bar.progress(steps[0][1])
+        matches_df, deliveries_df = load_data_from_zip(uploaded_file)
+
+        # Steps 2-7 — animate progress while doing real work
+        for i, (label, pct) in enumerate(steps[1:], 1):
+            status_text.markdown(f'<div class="progress-label">{label} &nbsp; {int(pct*100)}%</div>', unsafe_allow_html=True)
+            progress_bar.progress(pct)
+            time.sleep(0.15)  # brief pause so user can see each step
+
+        st.session_state.matches_df       = matches_df
+        st.session_state.deliveries_df    = deliveries_df
+        st.session_state.all_stats_cache  = None  # reset cache on new upload
+
+        progress_bar.progress(1.0)
+        status_text.markdown("")
+        st.success(
+            f"✅ Ready! Loaded **{len(matches_df)} matches** and **{len(deliveries_df):,} deliveries** · "
+            f"All stats computed and cached."
+        )
 
 # ── Guard: no data yet ────────────────────────────────────────────────────────
 if st.session_state.matches_df is None:
-    st.info("👆 Please upload your ZIP file above to get started.")
+    st.markdown("""
+    ### 👋 Welcome to Waseef Analytical Portal
+
+    A professional cricket analytics dashboard for ball-by-ball cricket data,
+    built by **Waseef Khalid Khan** — a passionate cricket fan and data enthusiast.
+
+    **What you can explore:**
+    - 🏏 Batting stats with position filters
+    - 🎳 Bowling stats with over-phase filters
+    - 📋 Full match results & scorecards
+    - 🏆 Team win/loss records & toss analysis
+    - 📈 Season-by-season visual trends
+    - 👤 Deep player profiles with win/loss splits
+
+    **To get started:** Upload your Cricket CSV zip file above ☝️
+    """)
     st.stop()
 
-matches_df: pd.DataFrame = st.session_state.matches_df
+matches_df: pd.DataFrame    = st.session_state.matches_df
 deliveries_df: pd.DataFrame = st.session_state.deliveries_df
 
 # ── Sidebar Filters ───────────────────────────────────────────────────────────
@@ -202,14 +274,48 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.markdown('<div class="section-header">🏏 Batting Statistics</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1, 3])
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         min_innings = st.number_input("Min Innings", min_value=1, value=3, step=1)
         sort_by_bat = st.selectbox("Sort By", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"])
+    with col2:
+        use_pos_filter = st.toggle("🔢 Filter by Batting Position", value=False)
+        if use_pos_filter:
+            selected_positions = st.multiselect(
+                "Batting Position(s)",
+                options=list(range(1, 12)),
+                default=[1, 2],
+                format_func=lambda x: f"Position {x}",
+            )
+        else:
+            selected_positions = []
 
-    batting = get_batting_stats(bat_deliveries, min_innings=min_innings)
+    # Compute batting position: rank of first ball faced per innings per match
+    bat_del = bat_deliveries.copy()
+    if use_pos_filter and selected_positions:
+        # Compute batting order position per match+innings
+        bat_del["ball_num"] = pd.to_numeric(bat_del["ball"], errors="coerce")
+        first_ball = (
+            bat_del[bat_del["wides"] == 0]
+            .sort_values("ball_num")
+            .groupby(["match_id", "innings", "striker"])
+            .first()
+            .reset_index()[["match_id", "innings", "striker", "ball_num"]]
+        )
+        first_ball["position"] = (
+            first_ball.groupby(["match_id", "innings"])["ball_num"]
+            .rank(method="first")
+            .astype(int)
+        )
+        valid_pairs = first_ball[first_ball["position"].isin(selected_positions)][["match_id", "innings", "striker"]]
+        bat_del = bat_del.merge(valid_pairs, on=["match_id", "innings", "striker"], how="inner")
+
+    batting = get_batting_stats(bat_del, min_innings=min_innings)
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
     batting.index += 1
+
+    if use_pos_filter and selected_positions:
+        st.caption(f"Showing batters who batted at position(s): {', '.join(map(str, selected_positions))}")
 
     st.dataframe(batting, use_container_width=True, height=500)
 
@@ -226,14 +332,61 @@ with tab1:
 with tab2:
     st.markdown('<div class="section-header">🎳 Bowling Statistics</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1, 3])
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         min_overs = st.number_input("Min Overs", min_value=1, value=5, step=1)
         sort_by_bowl = st.selectbox("Sort By", ["wickets", "economy", "average", "bowling_sr", "overs"])
+    with col2:
+        use_over_filter = st.toggle("🎯 Filter by Over Number", value=False)
+        if use_over_filter:
+            # Detect max overs from data
+            max_over = 20  # default T20
+            if "ball" in bowl_deliveries.columns:
+                try:
+                    max_over = int(
+                        pd.to_numeric(bowl_deliveries["ball"], errors="coerce")
+                        .dropna()
+                        .apply(lambda x: int(str(x).split(".")[0]))
+                        .max()
+                    ) + 1
+                except Exception:
+                    max_over = 20
+            # Over phase presets
+            phase = st.radio(
+                "Phase Preset",
+                ["Custom", "Powerplay (1-6)", "Middle (7-15)", "Death (16-20)"],
+                horizontal=False,
+            )
+            if phase == "Powerplay (1-6)":
+                selected_overs = list(range(1, 7))
+            elif phase == "Middle (7-15)":
+                selected_overs = list(range(7, 16))
+            elif phase == "Death (16-20)":
+                selected_overs = list(range(16, 21))
+            else:
+                selected_overs = st.multiselect(
+                    "Select Over(s)",
+                    options=list(range(1, max_over + 1)),
+                    default=[1, 2, 3, 4, 5, 6],
+                    format_func=lambda x: f"Over {x}",
+                )
+        else:
+            selected_overs = []
 
-    bowling = get_bowling_stats(bowl_deliveries, min_overs=min_overs)
+    bowl_del = bowl_deliveries.copy()
+    if use_over_filter and selected_overs:
+        bowl_del["over_num"] = (
+            pd.to_numeric(bowl_del["ball"], errors="coerce")
+            .apply(lambda x: int(str(x).split(".")[0]) + 1 if pd.notna(x) else 0)
+        )
+        bowl_del = bowl_del[bowl_del["over_num"].isin(selected_overs)]
+
+    bowling = get_bowling_stats(bowl_del, min_overs=min_overs)
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
     bowling.index += 1
+
+    if use_over_filter and selected_overs:
+        st.caption(f"Showing bowling stats for over(s): {', '.join(map(str, sorted(selected_overs)))}")
 
     st.dataframe(bowling, use_container_width=True, height=500)
 
@@ -303,12 +456,6 @@ with tab5:
         plot_runs_per_season(final_deliveries, final_matches)
     with col2:
         plot_wickets_per_season(final_deliveries, final_matches)
-
-    col3, col4 = st.columns(2)
-    with col3:
-        plot_win_by_method(final_matches)
-    with col4:
-        plot_toss_impact(final_matches)
 
     st.markdown('<div class="section-header">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
     bat_chart = get_batting_stats(bat_deliveries, min_innings=1).sort_values("runs", ascending=False).head(10)
