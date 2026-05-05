@@ -91,8 +91,8 @@ if "matches_df" not in st.session_state:
     st.session_state.matches_df = None
 if "deliveries_df" not in st.session_state:
     st.session_state.deliveries_df = None
-if "all_stats_cache" not in st.session_state:
-    st.session_state.all_stats_cache = None
+if "cached" not in st.session_state:
+    st.session_state.cached = None
 
 # ── File Upload ───────────────────────────────────────────────────────────────
 with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.session_state.matches_df is None):
@@ -102,43 +102,63 @@ with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.
         help="Upload the ZIP folder containing all match CSVs and info CSVs",
     )
     if uploaded_file:
-        st.markdown("### ⏳ Loading & Computing All Stats...")
-        steps = [
-            ("📂 Parsing CSV files",         0.15),
-            ("🏏 Building match index",       0.25),
-            ("📊 Computing batting stats",    0.45),
-            ("🎳 Computing bowling stats",    0.60),
-            ("👤 Building player profiles",  0.80),
-            ("🏆 Computing team stats",       0.90),
-            ("✅ Finalising database",        1.00),
-        ]
+        st.markdown("### ⏳ Loading & Computing All Stats — please wait...")
         progress_bar = st.progress(0)
         status_text  = st.empty()
 
-        # Step 1 — parse CSVs
-        status_text.markdown(f'<div class="progress-label">{steps[0][0]}</div>', unsafe_allow_html=True)
-        progress_bar.progress(steps[0][1])
+        def _step(msg, pct):
+            status_text.markdown(
+                f'<div class="progress-label">{msg} &nbsp;&nbsp; <b>{int(pct*100)}%</b></div>',
+                unsafe_allow_html=True,
+            )
+            progress_bar.progress(pct)
+
+        # 1 — Parse all CSVs
+        _step("📂 Parsing CSV files...", 0.10)
         matches_df, deliveries_df = load_data_from_zip(uploaded_file)
 
-        # Steps 2-7 — animate progress while doing real work
-        for i, (label, pct) in enumerate(steps[1:], 1):
-            status_text.markdown(f'<div class="progress-label">{label} &nbsp; {int(pct*100)}%</div>', unsafe_allow_html=True)
-            progress_bar.progress(pct)
-            time.sleep(0.15)  # brief pause so user can see each step
+        # 2 — Batting stats (all, min 1 innings)
+        _step("🏏 Computing batting stats...", 0.30)
+        batting_all = get_batting_stats(deliveries_df, min_innings=1)
 
+        # 3 — Bowling stats (all, min 1 over)
+        _step("🎳 Computing bowling stats...", 0.50)
+        bowling_all = get_bowling_stats(deliveries_df, min_overs=1)
+
+        # 4 — Match stats
+        _step("📋 Computing match results...", 0.65)
+        match_stats_all = get_match_stats(matches_df)
+        team_stats_all  = get_team_stats(matches_df)
+        toss_stats_all  = get_toss_stats(matches_df)
+        pom_stats_all   = get_player_of_match_stats(matches_df)
+
+        # 5 — Player profiles (heaviest — done once here)
+        _step("👤 Building all player profiles...", 0.80)
+        all_profiles = precompute_all_profiles(deliveries_df, matches_df)
+
+        # 6 — Store everything in session state
+        _step("✅ Finalising & caching...", 0.95)
         st.session_state.matches_df       = matches_df
         st.session_state.deliveries_df    = deliveries_df
-        st.session_state.all_stats_cache  = None  # reset cache on new upload
+        st.session_state.cached = {
+            "batting_all":    batting_all,
+            "bowling_all":    bowling_all,
+            "match_stats":    match_stats_all,
+            "team_stats":     team_stats_all,
+            "toss_stats":     toss_stats_all,
+            "pom_stats":      pom_stats_all,
+            "all_profiles":   all_profiles,
+        }
 
         progress_bar.progress(1.0)
         status_text.markdown("")
         st.success(
-            f"✅ Ready! Loaded **{len(matches_df)} matches** and **{len(deliveries_df):,} deliveries** · "
-            f"All stats computed and cached."
+            f"✅ Ready! **{len(matches_df)} matches** · **{len(deliveries_df):,} deliveries** · "
+            f"**{len(all_profiles)} player profiles** — all computed & cached!"
         )
 
 # ── Guard: no data yet ────────────────────────────────────────────────────────
-if st.session_state.matches_df is None:
+if st.session_state.matches_df is None or st.session_state.cached is None:
     st.markdown("""
     ### 👋 Welcome to Waseef Analytical Portal
 
@@ -159,6 +179,7 @@ if st.session_state.matches_df is None:
 
 matches_df: pd.DataFrame    = st.session_state.matches_df
 deliveries_df: pd.DataFrame = st.session_state.deliveries_df
+_cache = st.session_state.cached  # precomputed stats dict
 
 # ── Sidebar Filters ───────────────────────────────────────────────────────────
 st.sidebar.markdown("## 🔍 Filters")
@@ -310,7 +331,13 @@ with tab1:
         valid_pairs = first_ball[first_ball["position"].isin(selected_positions)][["match_id", "innings", "striker"]]
         bat_del = bat_del.merge(valid_pairs, on=["match_id", "innings", "striker"], how="inner")
 
-    batting = get_batting_stats(bat_del, min_innings=min_innings)
+    # Use precomputed full batting stats, then filter by team if needed
+    batting_base = _cache["batting_all"] if not (use_pos_filter and selected_positions) else get_batting_stats(bat_del, min_innings=1)
+    if selected_batting_teams:
+        # filter to players who batted for selected team
+        valid_players = bat_deliveries["striker"].dropna().unique()
+        batting_base = batting_base[batting_base["player"].isin(valid_players)]
+    batting = batting_base[batting_base["innings"] >= min_innings].copy()
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
     batting.index += 1
 
@@ -381,7 +408,15 @@ with tab2:
         )
         bowl_del = bowl_del[bowl_del["over_num"].isin(selected_overs)]
 
-    bowling = get_bowling_stats(bowl_del, min_overs=min_overs)
+    # Use precomputed full bowling stats, then filter by team/overs if needed
+    if use_over_filter and selected_overs:
+        bowling_base = get_bowling_stats(bowl_del, min_overs=1)
+    else:
+        bowling_base = _cache["bowling_all"]
+    if selected_bowling_teams:
+        valid_bowlers = bowl_deliveries["bowler"].dropna().unique()
+        bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers)]
+    bowling = bowling_base[bowling_base["overs"] >= min_overs].copy()
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
     bowling.index += 1
 
@@ -407,7 +442,7 @@ with tab3:
     st.dataframe(match_stats, use_container_width=True, height=500)
 
     st.markdown('<div class="section-header">🥇 Player of the Match</div>', unsafe_allow_html=True)
-    pom = get_player_of_match_stats(final_matches)
+    pom = _cache["pom_stats"]
     col1, col2 = st.columns(2)
     with col1:
         st.dataframe(pom, use_container_width=True, height=400)
@@ -431,7 +466,7 @@ with tab4:
     st.dataframe(team_stats, use_container_width=True, height=400)
 
     st.markdown('<div class="section-header">🪙 Toss Analysis</div>', unsafe_allow_html=True)
-    toss = get_toss_stats(final_matches)
+    toss = _cache["toss_stats"]
     col1, col2 = st.columns(2)
     with col1:
         st.dataframe(toss, use_container_width=True)
@@ -458,11 +493,19 @@ with tab5:
         plot_wickets_per_season(final_deliveries, final_matches)
 
     st.markdown('<div class="section-header">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
-    bat_chart = get_batting_stats(bat_deliveries, min_innings=1).sort_values("runs", ascending=False).head(10)
+    bat_chart = _cache["batting_all"].copy()
+    if selected_batting_teams:
+        valid_p = bat_deliveries["striker"].dropna().unique()
+        bat_chart = bat_chart[bat_chart["player"].isin(valid_p)]
+    bat_chart = bat_chart.sort_values("runs", ascending=False).head(10)
     plot_top_batsmen(bat_chart, x="player", y="runs", title="Top 10 Run Scorers")
 
     st.markdown('<div class="section-header">🎳 Top 10 Wicket Takers</div>', unsafe_allow_html=True)
-    bowl_chart = get_bowling_stats(bowl_deliveries, min_overs=1).sort_values("wickets", ascending=False).head(10)
+    bowl_chart = _cache["bowling_all"].copy()
+    if selected_bowling_teams:
+        valid_b = bowl_deliveries["bowler"].dropna().unique()
+        bowl_chart = bowl_chart[bowl_chart["player"].isin(valid_b)]
+    bowl_chart = bowl_chart.sort_values("wickets", ascending=False).head(10)
     plot_top_bowlers(bowl_chart)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -473,12 +516,8 @@ with tab6:
 
     # Precompute ALL player profiles once — cached by data size so recomputes
     # only when filters change. Individual lookups are then instant (dict key).
-    @st.cache_data(show_spinner=False)
-    def _all_profiles(del_hash, match_hash):
-        return precompute_all_profiles(final_deliveries, final_matches)
-
-    with st.spinner("⏳ Building player database..."):
-        all_profiles = _all_profiles(len(final_deliveries), len(final_matches))
+    # Instant — loaded from cache computed at upload time
+    all_profiles = _cache["all_profiles"]
 
     all_players = sorted(all_profiles.keys())
 
