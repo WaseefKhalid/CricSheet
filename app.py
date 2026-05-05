@@ -56,60 +56,240 @@ st.set_page_config(
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.6rem;
-        font-weight: 800;
-        color: #1DB954;
-        text-align: center;
-        padding: 0.8rem 0 0.2rem 0;
-        letter-spacing: 1px;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
+
+    /* ── Global ── */
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    .stApp { background: #080b12; }
+
+    /* ── Sidebar ── */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0d1117 0%, #0a0e1a 100%);
+        border-right: 1px solid #1a2332;
     }
-    .sub-header {
+    section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
+    section[data-testid="stSidebar"] .stMarkdown h2 {
+        color: #58a6ff !important;
+        font-size: 0.85rem !important;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-weight: 700 !important;
+    }
+
+    /* ── Hero Header ── */
+    .hero-wrapper {
+        background: linear-gradient(135deg, #0d1117 0%, #0f1923 50%, #0d1117 100%);
+        border-bottom: 1px solid #1a2332;
+        padding: 2.5rem 2rem 1.5rem 2rem;
         text-align: center;
-        color: #a0aec0;
+        margin-bottom: 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .hero-wrapper::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(ellipse at center, rgba(29,185,84,0.06) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .hero-title {
+        font-size: 3rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #1DB954 0%, #00d4ff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -1px;
+        line-height: 1.1;
+        margin-bottom: 0.5rem;
+    }
+    .hero-sub {
+        color: #8b949e;
         font-size: 0.95rem;
-        margin-bottom: 0.3rem;
+        font-weight: 400;
+        margin-bottom: 0.8rem;
     }
-    .linkedin-bar {
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .metric-card {
-        background: #1e1e2e;
-        border-radius: 10px;
-        padding: 1rem;
-        text-align: center;
-        border: 1px solid #333;
-    }
-    .section-header {
-        font-size: 1.4rem;
+    .hero-badge {
+        display: inline-block;
+        background: rgba(29,185,84,0.1);
+        border: 1px solid rgba(29,185,84,0.3);
+        border-radius: 20px;
+        padding: 0.3rem 1rem;
+        font-size: 0.85rem;
+        color: #1DB954;
         font-weight: 600;
-        color: #00b4d8;
-        border-bottom: 2px solid #00b4d8;
-        padding-bottom: 0.3rem;
-        margin: 1.5rem 0 1rem 0;
+        margin-bottom: 0.5rem;
     }
-    .progress-label {
+    .linkedin-link {
+        color: #58a6ff !important;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        transition: color 0.2s;
+    }
+
+    /* ── KPI Cards ── */
+    div[data-testid="metric-container"] {
+        background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
+        border: 1px solid #1a3550;
+        border-radius: 12px;
+        padding: 1rem 1.2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(29,185,84,0.15);
+        border-color: rgba(29,185,84,0.3);
+    }
+    div[data-testid="metric-container"] label {
+        color: #8b949e !important;
+        font-size: 0.75rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 600 !important;
+    }
+    div[data-testid="metric-container"] [data-testid="stMetricValue"] {
+        color: #ffffff !important;
+        font-size: 1.9rem !important;
+        font-weight: 800 !important;
+    }
+
+    /* ── Section Headers ── */
+    .section-header {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #ffffff;
+        padding: 0.6rem 0 0.6rem 1rem;
+        margin: 1.8rem 0 1rem 0;
+        border-left: 3px solid #1DB954;
+        background: linear-gradient(90deg, rgba(29,185,84,0.08) 0%, transparent 100%);
+        border-radius: 0 8px 8px 0;
+    }
+
+    /* ── Tabs ── */
+    .stTabs [data-baseweb="tab-list"] {
+        background: #0d1117;
+        border-bottom: 1px solid #1a2332;
+        gap: 0;
+        padding: 0;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        color: #8b949e;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 0.75rem 1.2rem;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        letter-spacing: 0.3px;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #1DB954 !important;
+        border-bottom: 2px solid #1DB954 !important;
+        background: rgba(29,185,84,0.05) !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #ffffff !important;
+        background: rgba(255,255,255,0.04) !important;
+    }
+
+    /* ── DataFrames ── */
+    div[data-testid="stDataFrame"] {
+        border-radius: 10px;
+        border: 1px solid #1a2332;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    /* ── Buttons ── */
+    .stButton > button {
+        background: linear-gradient(135deg, #1DB954 0%, #17a349 100%);
+        color: #000000;
+        font-weight: 700;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1.2rem;
         font-size: 0.9rem;
-        color: #a0aec0;
-        margin-bottom: 4px;
+        transition: all 0.2s;
+        box-shadow: 0 4px 15px rgba(29,185,84,0.3);
     }
-    div[data-testid="stDataFrame"] { border-radius: 8px; }
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(29,185,84,0.5);
+        background: linear-gradient(135deg, #22d160 0%, #1DB954 100%);
+    }
+
+    /* ── Expanders ── */
+    .streamlit-expanderHeader {
+        background: #0d1f2d !important;
+        border: 1px solid #1a3550 !important;
+        border-radius: 8px !important;
+        color: #c9d1d9 !important;
+        font-weight: 600 !important;
+    }
+
+    /* ── Selectboxes & Multiselects ── */
+    .stSelectbox > div > div,
+    .stMultiSelect > div > div {
+        background: #0d1f2d !important;
+        border: 1px solid #1a3550 !important;
+        border-radius: 8px !important;
+        color: #c9d1d9 !important;
+    }
+
+    /* ── Progress bar ── */
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #1DB954, #00d4ff) !important;
+        border-radius: 4px;
+    }
+
+    /* ── Progress label ── */
+    .progress-label {
+        font-size: 0.95rem;
+        color: #c9d1d9;
+        font-weight: 500;
+        padding: 0.4rem 0;
+    }
+
+    /* ── Toggle ── */
+    .stToggle label { color: #c9d1d9 !important; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #1a3550; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #1DB954; }
+
+    /* ── Hide Streamlit branding ── */
+    #MainMenu, footer, header { visibility: hidden; }
+    .block-container { padding-top: 0 !important; max-width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown('<div class="main-header">🏏 Waseef Analytical Portal</div>', unsafe_allow_html=True)
-
-# Show active league badge if one is loaded
 _active = st.session_state.get("active_league")
-_sub = f"Currently viewing: <b>{_active}</b>" if _active else "Built by a passionate cricket fan &amp; data enthusiast · Transforming ball-by-ball cricket data into deep insights"
-st.markdown(f'<div class="sub-header">{_sub}</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="linkedin-bar">'    '<a href="https://www.linkedin.com/in/waseef-khalid-khan-366951237" target="_blank" '    'style="color:#0077b5;text-decoration:none;font-weight:600;font-size:0.95rem;">'    '🔗 Connect on LinkedIn — Waseef Khalid Khan</a></div>',
-    unsafe_allow_html=True,
-)
-st.markdown("---")
+_badge  = f'<div class="hero-badge">📊 {_active}</div>' if _active else ''
+_sub    = "Transforming ball-by-ball cricket data into deep insights"
+
+st.markdown(f"""
+<div class="hero-wrapper">
+    {_badge}
+    <div class="hero-title">🏏 Waseef Analytical Portal</div>
+    <div class="hero-sub">{_sub}</div>
+    <a href="https://www.linkedin.com/in/waseef-khalid-khan-366951237"
+       target="_blank" class="linkedin-link">
+       🔗 Connect on LinkedIn — Waseef Khalid Khan
+    </a>
+</div>
+""", unsafe_allow_html=True)
 
 # ── Session State ─────────────────────────────────────────────────────────────
 if "matches_df" not in st.session_state:
@@ -228,16 +408,29 @@ if show_picker:
                     updated = "Unknown"
 
                 st.markdown(f"""
-                <div style="background:#1e1e2e;border-radius:12px;padding:1.2rem;
-                            border:1px solid #333;text-align:center;margin-bottom:0.5rem;">
-                    <div style="font-size:1.4rem;font-weight:800;color:#ffffff;margin-bottom:0.3rem;">
+                <div style="
+                    background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
+                    border-radius: 14px;
+                    padding: 1.5rem 1.2rem 1rem 1.2rem;
+                    border: 1px solid #1a3550;
+                    text-align: center;
+                    margin-bottom: 0.5rem;
+                    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+                    transition: all 0.2s;
+                ">
+                    <div style="font-size:2.2rem;margin-bottom:0.4rem;">🏏</div>
+                    <div style="font-size:1.2rem;font-weight:800;color:#ffffff;
+                                margin-bottom:0.5rem;letter-spacing:-0.3px;">
                         {league_name}
                     </div>
-                    <div style="color:#1DB954;font-size:0.9rem;margin-bottom:0.2rem;">
-                        🏏 ~{n_matches} matches
+                    <div style="display:inline-block;background:rgba(29,185,84,0.12);
+                                border:1px solid rgba(29,185,84,0.3);border-radius:20px;
+                                padding:0.2rem 0.8rem;font-size:0.82rem;color:#1DB954;
+                                font-weight:600;margin-bottom:0.4rem;">
+                        {n_matches} matches
                     </div>
-                    <div style="color:#a0aec0;font-size:0.8rem;">
-                        🕒 Updated: {updated}
+                    <div style="color:#8b949e;font-size:0.78rem;margin-top:0.3rem;">
+                        🕒 {updated}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
