@@ -24,8 +24,27 @@ from components.charts import (
     plot_top_bowlers,
 )
 
-# ── Data path — place your ZIP here and it auto-loads for all users ───────────
-DATA_PATH = "data/cricket_data.zip"  # put your zip in /data folder in repo
+# ── Auto-discover leagues from data/ folder ──────────────────────────────────
+# Just drop any ZIP file into /data — it appears automatically as a league option
+# Display name is derived from the filename: "psl_data.zip" → "PSL Data"
+def _discover_leagues(data_dir="data"):
+    """Scan data/ folder and return {display_name: file_path} for all ZIPs found."""
+    leagues = {}
+    if not os.path.exists(data_dir):
+        return leagues
+    for fname in sorted(os.listdir(data_dir)):
+        if fname.lower().endswith(".zip"):
+            path = os.path.join(data_dir, fname)
+            # Build a clean display name from filename
+            # "psl_data.zip" → "PSL Data"
+            # "ipl_2024.zip" → "IPL 2024"
+            # "t20_internationals.zip" → "T20 Internationals"
+            name = fname.replace(".zip", "").replace("_", " ").replace("-", " ")
+            name = " ".join(w.upper() if len(w) <= 4 else w.capitalize() for w in name.split())
+            leagues[name] = path
+    return leagues
+
+AVAILABLE_LEAGUES = _discover_leagues()
 
 st.set_page_config(
     page_title="Waseef Analytical Portal",
@@ -81,10 +100,11 @@ st.markdown("""
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown('<div class="main-header">🏏 Waseef Analytical Portal</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="sub-header">Built by a passionate cricket fan & data enthusiast · '    'Transforming ball-by-ball cricket data into deep insights</div>',
-    unsafe_allow_html=True,
-)
+
+# Show active league badge if one is loaded
+_active = st.session_state.get("active_league")
+_sub = f"Currently viewing: <b>{_active}</b>" if _active else "Built by a passionate cricket fan &amp; data enthusiast · Transforming ball-by-ball cricket data into deep insights"
+st.markdown(f'<div class="sub-header">{_sub}</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="linkedin-bar">'    '<a href="https://www.linkedin.com/in/waseef-khalid-khan-366951237" target="_blank" '    'style="color:#0077b5;text-decoration:none;font-weight:600;font-size:0.95rem;">'    '🔗 Connect on LinkedIn — Waseef Khalid Khan</a></div>',
     unsafe_allow_html=True,
@@ -98,6 +118,8 @@ if "deliveries_df" not in st.session_state:
     st.session_state.deliveries_df = None
 if "cached" not in st.session_state:
     st.session_state.cached = None
+if "active_league" not in st.session_state:
+    st.session_state.active_league = None
 
 
 def _compute_and_cache(matches_df, deliveries_df, progress_bar, status_text):
@@ -144,57 +166,106 @@ def _compute_and_cache(matches_df, deliveries_df, progress_bar, status_text):
     status_text.markdown("")
 
 
-# ── AUTO-LOAD from data/ folder (no upload needed for users) ─────────────────
-if st.session_state.matches_df is None:
-    if os.path.exists(DATA_PATH):
-        st.markdown("### ⏳ Loading data — please wait...")
-        pb = st.progress(0)
-        st_txt = st.empty()
-        st_txt.markdown(
-            '<div class="progress-label">📂 Reading data file... &nbsp; <b>5%</b></div>',
-            unsafe_allow_html=True,
-        )
-        pb.progress(0.05)
-        with open(DATA_PATH, "rb") as f:
-            matches_df, deliveries_df = load_data_from_zip(f)
-        _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+# ── LEAGUE SELECTOR — shown when no league loaded or user wants to switch ──────
+def _load_league(league_name, zip_path):
+    """Load a league zip and compute all stats."""
+    st.markdown(f"### ⏳ Loading **{league_name}** — please wait...")
+    pb = st.progress(0)
+    st_txt = st.empty()
+    st_txt.markdown(
+        '<div class="progress-label">📂 Reading data file... &nbsp; <b>5%</b></div>',
+        unsafe_allow_html=True,
+    )
+    pb.progress(0.05)
+    with open(zip_path, "rb") as f:
+        matches_df, deliveries_df = load_data_from_zip(f)
+    _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+    st.session_state.active_league = league_name
+    st.rerun()
+
+
+# Show league picker if no league loaded yet OR user clicks switch
+show_picker = (
+    st.session_state.matches_df is None or
+    st.session_state.active_league is None
+)
+
+# Switch league button in sidebar (only after data is loaded)
+if not show_picker and st.session_state.active_league:
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Switch League"):
+        st.session_state.matches_df    = None
+        st.session_state.deliveries_df = None
+        st.session_state.cached        = None
+        st.session_state.active_league = None
         st.rerun()
 
-# ── ADMIN UPLOAD (only shown when no data file exists in repo) ────────────────
-if st.session_state.matches_df is None:
-    with st.expander("📂 Upload Data", expanded=True):
-        st.info(
-            "No pre-loaded data found. Upload a ZIP file to get started. "
-            "To make data permanent, place `cricket_data.zip` in the `/data` folder of your repo."
-        )
-        uploaded_file = st.file_uploader(
-            "Upload Cricket CSV zip file", type=["zip"],
-        )
-        if uploaded_file:
-            st.markdown("### ⏳ Loading & Computing All Stats...")
-            pb = st.progress(0)
-            st_txt = st.empty()
-            st_txt.markdown(
-                '<div class="progress-label">📂 Parsing CSV files... &nbsp; <b>5%</b></div>',
-                unsafe_allow_html=True,
-            )
-            pb.progress(0.05)
-            matches_df, deliveries_df = load_data_from_zip(uploaded_file)
-            _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
-            st.success(
-                f"✅ Ready! **{len(st.session_state.matches_df)} matches** · "
-                f"**{len(st.session_state.deliveries_df):,} deliveries** · "
-                f"**{len(st.session_state.cached['all_profiles'])} players** — all cached!"
-            )
-            st.rerun()
+if show_picker:
+    st.markdown("---")
+    if AVAILABLE_LEAGUES:
+        st.markdown("## 🏏 Select a League to Explore")
+        st.markdown("Choose which cricket league you want to analyse:")
+        st.markdown("")
+
+        # Show league cards in a grid
+        cols = st.columns(min(len(AVAILABLE_LEAGUES), 3))
+        for i, (league_name, zip_path) in enumerate(AVAILABLE_LEAGUES.items()):
+            with cols[i % 3]:
+                # Count files to show match estimate
+                import zipfile
+                try:
+                    with zipfile.ZipFile(zip_path) as z:
+                        n_matches = len([f for f in z.namelist() if f.endswith("_info.csv")])
+                except Exception:
+                    n_matches = 0
+
+                st.markdown(f"""
+                <div style="background:#1e1e2e;border-radius:12px;padding:1.2rem;
+                            border:1px solid #333;text-align:center;margin-bottom:0.5rem;">
+                    <div style="font-size:2rem;">{league_name.split()[0]}</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:#1DB954;margin:0.3rem 0;">
+                        {" ".join(league_name.split()[1:])}
+                    </div>
+                    <div style="color:#a0aec0;font-size:0.85rem;">~{n_matches} matches</div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button(f"Load {league_name.split()[1]}", key=f"load_{i}"):
+                    _load_league(league_name, zip_path)
+
+        # Upload option if they have a league not in the list
+        st.markdown("---")
+        with st.expander("📂 Or upload a custom ZIP file"):
+            uploaded_file = st.file_uploader("Upload Cricket CSV zip", type=["zip"])
+            custom_name   = st.text_input("League name", placeholder="e.g. SA20, LPL, MLC...")
+            if uploaded_file and custom_name:
+                if st.button("Load uploaded data"):
+                    st.markdown(f"### ⏳ Loading **{custom_name}**...")
+                    pb = st.progress(0)
+                    st_txt = st.empty()
+                    pb.progress(0.05)
+                    matches_df, deliveries_df = load_data_from_zip(uploaded_file)
+                    _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+                    st.session_state.active_league = custom_name
+                    st.rerun()
+    else:
+        # No leagues in data/ folder — show upload
+        st.markdown("## 👋 Welcome to Waseef Analytical Portal")
+        st.markdown("No pre-loaded leagues found. Upload a cricket CSV zip to get started.")
+        uploaded_file = st.file_uploader("Upload Cricket CSV zip", type=["zip"])
+        custom_name   = st.text_input("League name", placeholder="e.g. PSL, IPL, T20I...")
+        if uploaded_file and custom_name:
+            if st.button("Load"):
+                pb = st.progress(0)
+                st_txt = st.empty()
+                pb.progress(0.05)
+                matches_df, deliveries_df = load_data_from_zip(uploaded_file)
+                _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+                st.session_state.active_league = custom_name
+                st.rerun()
+    st.stop()
 
 # ── Guard ─────────────────────────────────────────────────────────────────────
 if st.session_state.matches_df is None or st.session_state.cached is None:
-    st.markdown("""
-    ### 👋 Welcome to Waseef Analytical Portal
-    A professional cricket analytics dashboard built by **Waseef Khalid Khan**.
-    Data is loading or not yet available — please wait or upload a ZIP file above.
-    """)
     st.stop()
 
 matches_df: pd.DataFrame    = st.session_state.matches_df
