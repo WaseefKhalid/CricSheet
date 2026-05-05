@@ -394,16 +394,25 @@ st.markdown("""
 
 # ── Header ────────────────────────────────────────────────────────────────────
 _active = st.session_state.get("active_league")
-_badge  = f'<div class="hero-badge">📊 {_active}</div>' if _active else ''
-_sub    = "Transforming ball-by-ball cricket data into deep insights"
+_badge  = f'<span style="display:inline-block;background:rgba(29,185,84,0.15);border:1px solid rgba(29,185,84,0.4);border-radius:20px;padding:0.25rem 1rem;font-size:0.82rem;color:#1DB954;font-weight:700;letter-spacing:0.5px;margin-bottom:0.6rem;">📊 {_active}</span>' if _active else ''
 
 st.markdown(f"""
-<div class="hero-wrapper">
+<div style="background:linear-gradient(135deg,#0d1117 0%,#0f1923 50%,#0d1117 100%);
+            border-bottom:1px solid #1a2332;padding:2.5rem 2rem 1.8rem 2rem;
+            text-align:center;margin-bottom:0;">
     {_badge}
-    <div class="hero-title">🏏 Waseef Analytical Portal</div>
-    <div class="hero-sub">{_sub}</div>
+    <div style="font-size:2.8rem;font-weight:900;
+                background:linear-gradient(135deg,#1DB954 0%,#00d4ff 100%);
+                -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+                background-clip:text;letter-spacing:-1px;line-height:1.1;margin-bottom:0.4rem;">
+        🏏 Waseef Analytical Portal
+    </div>
+    <div style="color:#8b949e;font-size:0.95rem;font-weight:400;margin-bottom:0.8rem;">
+        Transforming ball-by-ball cricket data into deep insights
+    </div>
     <a href="https://www.linkedin.com/in/waseef-khalid-khan-366951237"
-       target="_blank" class="linkedin-link">
+       target="_blank"
+       style="color:#58a6ff;text-decoration:none;font-size:0.85rem;font-weight:600;">
        🔗 Connect on LinkedIn — Waseef Khalid Khan
     </a>
 </div>
@@ -719,7 +728,7 @@ if selected_main_team:
     valid_team_players = _bat_p | _bowl_p
 
 # ── KPI Row ───────────────────────────────────────────────────────────────────
-st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
+st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">📊 Overview</div>', unsafe_allow_html=True)
 
 k1, k2, k3, k4, k5 = st.columns(5)
 k1.metric("🏏 Matches", len(final_matches))
@@ -744,18 +753,18 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # TAB 1 — BATTING
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.markdown('<div class="section-header">🏏 Batting Statistics</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting Statistics</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="filter-panel">', unsafe_allow_html=True)
+    st.markdown('<div style="background:linear-gradient(135deg,#0d1f2d 0%,#0a1628 100%);border:1px solid #1a3550;border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.25);">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        st.markdown('<div class="filter-label">Minimum Innings</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Minimum Innings</div>', unsafe_allow_html=True)
         min_innings = st.number_input("", min_value=1, value=3, step=1, key="min_inn", label_visibility="collapsed")
     with col2:
-        st.markdown('<div class="filter-label">Sort By</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Sort By</div>', unsafe_allow_html=True)
         sort_by_bat = st.selectbox("", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"], key="sort_bat", label_visibility="collapsed")
     with col3:
-        st.markdown('<div class="filter-label">Batting Position Filter</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Batting Position Filter</div>', unsafe_allow_html=True)
         use_pos_filter = st.toggle("🔢 Enable Position Filter", value=False)
         if use_pos_filter:
             selected_positions = st.multiselect(
@@ -817,7 +826,7 @@ with tab1:
 
     col_th, col_dl = st.columns([6,1])
     with col_th:
-        st.markdown(f'<div class="table-header"><span class="table-title">Batters</span><span class="table-count">{len(batting)} players</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.8rem;"><span style="font-size:1rem;font-weight:700;color:#ffffff;">Batters</span><span style="font-size:0.78rem;color:#8b949e;background:#1a2332;padding:0.2rem 0.6rem;border-radius:10px;">{len(batting)} players</span></div>', unsafe_allow_html=True)
     with col_dl:
         st.download_button("⬇️ CSV", batting.to_csv(index=False), file_name="batting_stats.csv", mime="text/csv")
     st.dataframe(batting, use_container_width=True, height=500)
@@ -826,17 +835,17 @@ with tab1:
 # TAB 2 — BOWLING
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.markdown('<div class="section-header">🎳 Bowling Statistics</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Bowling Statistics</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="filter-panel">', unsafe_allow_html=True)
+    st.markdown('<div style="background:linear-gradient(135deg,#0d1f2d 0%,#0a1628 100%);border:1px solid #1a3550;border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.25);">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        st.markdown('<div class="filter-label">Minimum Overs</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Minimum Overs</div>', unsafe_allow_html=True)
         min_overs = st.number_input("", min_value=1, value=5, step=1, key="min_ovs", label_visibility="collapsed")
-        st.markdown('<div class="filter-label" style="margin-top:0.5rem;">Sort By</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;margin-top:0.5rem;">Sort By</div>', unsafe_allow_html=True)
         sort_by_bowl = st.selectbox("", ["wickets", "economy", "average", "bowling_sr", "overs"], key="sort_bowl", label_visibility="collapsed")
     with col2:
-        st.markdown('<div class="filter-label">Over Phase Filter</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.3rem;">Over Phase Filter</div>', unsafe_allow_html=True)
         use_over_filter = st.toggle("🎯 Enable Over Filter", value=False)
         if use_over_filter:
             # Detect max overs from data
@@ -902,7 +911,7 @@ with tab2:
 
     col_th, col_dl = st.columns([6,1])
     with col_th:
-        st.markdown(f'<div class="table-header"><span class="table-title">Bowlers</span><span class="table-count">{len(bowling)} players</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.8rem;"><span style="font-size:1rem;font-weight:700;color:#ffffff;">Bowlers</span><span style="font-size:0.78rem;color:#8b949e;background:#1a2332;padding:0.2rem 0.6rem;border-radius:10px;">{len(bowling)} players</span></div>', unsafe_allow_html=True)
     with col_dl:
         st.download_button("⬇️ CSV", bowling.to_csv(index=False), file_name="bowling_stats.csv", mime="text/csv")
     st.dataframe(bowling, use_container_width=True, height=500)
@@ -911,14 +920,14 @@ with tab2:
 # TAB 3 — MATCH RESULTS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.markdown('<div class="section-header">📋 Match Results</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">📋 Match Results</div>', unsafe_allow_html=True)
 
     # Slice cached match stats by current filter
     match_stats = _cache["match_stats"]
     match_stats = match_stats[match_stats["match_id"].isin(final_matches["match_id"])]
     st.dataframe(match_stats, use_container_width=True, height=500)
 
-    st.markdown('<div class="section-header">🥇 Player of the Match</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🥇 Player of the Match</div>', unsafe_allow_html=True)
 
     # Build POM from filtered matches (not full cache — respects current filters)
     filtered_match_ids = set(final_matches["match_id"].tolist())
@@ -982,7 +991,7 @@ with tab3:
 # TAB 4 — TEAM STATS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.markdown('<div class="section-header">🏆 Team Performance</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏆 Team Performance</div>', unsafe_allow_html=True)
 
     # Filter cached team stats to teams in current match filter
     active_teams = set()
@@ -993,7 +1002,7 @@ with tab4:
         team_stats = team_stats[team_stats["team"].isin(active_teams)]
     st.dataframe(team_stats, use_container_width=True, height=400)
 
-    st.markdown('<div class="section-header">🏏 Batting First vs Batting Second</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting First vs Batting Second</div>', unsafe_allow_html=True)
     bat_order = _cache["bat_order_stats"]
     if active_teams:
         bat_order = bat_order[bat_order["team"].isin(active_teams)]
@@ -1035,7 +1044,7 @@ with tab4:
                                paper_bgcolor="rgba(0,0,0,0)", font_color="white", showlegend=True)
             st.plotly_chart(fig2, use_container_width=True)
 
-    st.markdown('<div class="section-header">🪙 Toss Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🪙 Toss Analysis</div>', unsafe_allow_html=True)
     toss = _cache["toss_stats"]
     if active_teams:
         toss = toss[toss["toss_winner"].isin(active_teams)]
@@ -1052,7 +1061,7 @@ with tab4:
 # TAB 5 — CHARTS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab5:
-    st.markdown('<div class="section-header">📈 Visual Analytics</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">📈 Visual Analytics</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1060,14 +1069,14 @@ with tab5:
     with col2:
         plot_wickets_per_season(final_deliveries, final_matches)
 
-    st.markdown('<div class="section-header">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
     bat_chart = _cache["batting_all"].copy()
     if valid_bat_players is not None:
         bat_chart = bat_chart[bat_chart["player"].isin(valid_bat_players)]
     bat_chart = bat_chart.sort_values("runs", ascending=False).head(10)
     plot_top_batsmen(bat_chart, x="player", y="runs", title="Top 10 Run Scorers")
 
-    st.markdown('<div class="section-header">🎳 Top 10 Wicket Takers</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Top 10 Wicket Takers</div>', unsafe_allow_html=True)
     bowl_chart = _cache["bowling_all"].copy()
     if valid_bowl_players is not None:
         bowl_chart = bowl_chart[bowl_chart["player"].isin(valid_bowl_players)]
@@ -1078,7 +1087,7 @@ with tab5:
 # TAB 6 — PLAYER PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
 with tab6:
-    st.markdown('<div class="section-header">👤 Player Profile</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">👤 Player Profile</div>', unsafe_allow_html=True)
 
     # Precompute ALL player profiles once — cached by data size so recomputes
     # only when filters change. Individual lookups are then instant (dict key).
@@ -1125,7 +1134,7 @@ with tab6:
 
             # ── BATTING SECTION ───────────────────────────────────────────────
             if show_role in ("Both", "Batting Only"):
-                st.markdown('<div class="section-header">🏏 Batting</div>', unsafe_allow_html=True)
+                st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏏 Batting</div>', unsafe_allow_html=True)
 
                 if bat:
                     # KPIs
@@ -1192,7 +1201,7 @@ with tab6:
 
             # ── BOWLING SECTION ───────────────────────────────────────────────
             if show_role in ("Both", "Bowling Only"):
-                st.markdown('<div class="section-header">🎳 Bowling</div>', unsafe_allow_html=True)
+                st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🎳 Bowling</div>', unsafe_allow_html=True)
 
                 if bowl:
                     c1, c2, c3, c4, c5 = st.columns(5)
@@ -1249,7 +1258,7 @@ with tab6:
                     st.info(f"{selected_player} has no bowling records in the selected data.")
 
             # ── MAN OF MATCH SECTION ──────────────────────────────────────────
-            st.markdown('<div class="section-header">🏅 Player of the Match</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size:1.15rem;font-weight:700;color:#ffffff;padding:0.6rem 0 0.6rem 1rem;margin:1.8rem 0 1rem 0;border-left:3px solid #1DB954;background:linear-gradient(90deg,rgba(29,185,84,0.08) 0%,transparent 100%);border-radius:0 8px 8px 0;">🏅 Player of the Match</div>', unsafe_allow_html=True)
 
             if mom_total == 0:
                 st.info(f"{selected_player} has no Player of the Match awards in the selected data.")
