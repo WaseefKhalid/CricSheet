@@ -10,6 +10,7 @@ from utils.stats import (
     get_player_of_match_stats,
     get_toss_stats,
     get_player_profile,
+    precompute_all_profiles,
 )
 from components.charts import (
     plot_runs_per_season,
@@ -323,11 +324,16 @@ with tab5:
 with tab6:
     st.markdown('<div class="section-header">👤 Player Profile</div>', unsafe_allow_html=True)
 
-    # Build player list from both batting and bowling
-    all_players = sorted(set(
-        list(final_deliveries["striker"].dropna().unique()) +
-        list(final_deliveries["bowler"].dropna().unique())
-    ))
+    # Precompute ALL player profiles once — cached by data size so recomputes
+    # only when filters change. Individual lookups are then instant (dict key).
+    @st.cache_data(show_spinner=False)
+    def _all_profiles(del_hash, match_hash):
+        return precompute_all_profiles(final_deliveries, final_matches)
+
+    with st.spinner("⏳ Building player database..."):
+        all_profiles = _all_profiles(len(final_deliveries), len(final_matches))
+
+    all_players = sorted(all_profiles.keys())
 
     if not all_players:
         st.info("No player data available with current filters.")
@@ -344,15 +350,8 @@ with tab6:
         if not selected_player:
             st.info("👆 Select a player above to view their full profile.")
         else:
-            @st.cache_data(show_spinner=False)
-            def _cached_profile(name, del_hash, match_hash):
-                return get_player_profile(name, final_deliveries, final_matches)
-
-            del_hash   = len(final_deliveries)
-            match_hash = len(final_matches)
-
-            with st.spinner(f"⏳ Loading profile for {selected_player}..."):
-                profile = _cached_profile(selected_player, del_hash, match_hash)
+            # Instant lookup — no computation needed
+            profile = all_profiles[selected_player]
 
             st.markdown(f"## 🏏 {selected_player}")
             st.markdown("---")
