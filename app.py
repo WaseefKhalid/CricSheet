@@ -208,45 +208,61 @@ if show_picker:
         st.markdown("")
 
         # Show league cards in a grid
+        import zipfile
+        from datetime import datetime
         cols = st.columns(min(len(AVAILABLE_LEAGUES), 3))
         for i, (league_name, zip_path) in enumerate(AVAILABLE_LEAGUES.items()):
             with cols[i % 3]:
-                # Count files to show match estimate
-                import zipfile
+                # Match count
                 try:
                     with zipfile.ZipFile(zip_path) as z:
                         n_matches = len([f for f in z.namelist() if f.endswith("_info.csv")])
                 except Exception:
                     n_matches = 0
 
+                # Last updated date from file modification time
+                try:
+                    mod_time = os.path.getmtime(zip_path)
+                    updated  = datetime.fromtimestamp(mod_time).strftime("%d %b %Y")
+                except Exception:
+                    updated = "Unknown"
+
                 st.markdown(f"""
                 <div style="background:#1e1e2e;border-radius:12px;padding:1.2rem;
                             border:1px solid #333;text-align:center;margin-bottom:0.5rem;">
-                    <div style="font-size:2rem;">{league_name.split()[0]}</div>
-                    <div style="font-size:1.1rem;font-weight:700;color:#1DB954;margin:0.3rem 0;">
-                        {" ".join(league_name.split()[1:])}
+                    <div style="font-size:1.4rem;font-weight:800;color:#ffffff;margin-bottom:0.3rem;">
+                        {league_name}
                     </div>
-                    <div style="color:#a0aec0;font-size:0.85rem;">~{n_matches} matches</div>
+                    <div style="color:#1DB954;font-size:0.9rem;margin-bottom:0.2rem;">
+                        🏏 ~{n_matches} matches
+                    </div>
+                    <div style="color:#a0aec0;font-size:0.8rem;">
+                        🕒 Updated: {updated}
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-                if st.button(f"Load {league_name.split()[1]}", key=f"load_{i}"):
+                if st.button(f"▶ Load {league_name}", key=f"load_{i}", use_container_width=True):
                     _load_league(league_name, zip_path)
 
-        # Upload option if they have a league not in the list
+        # Upload option — only shown to admin (password protected)
         st.markdown("---")
-        with st.expander("📂 Or upload a custom ZIP file"):
-            uploaded_file = st.file_uploader("Upload Cricket CSV zip", type=["zip"])
-            custom_name   = st.text_input("League name", placeholder="e.g. SA20, LPL, MLC...")
-            if uploaded_file and custom_name:
-                if st.button("Load uploaded data"):
-                    st.markdown(f"### ⏳ Loading **{custom_name}**...")
-                    pb = st.progress(0)
-                    st_txt = st.empty()
-                    pb.progress(0.05)
-                    matches_df, deliveries_df = load_data_from_zip(uploaded_file)
-                    _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
-                    st.session_state.active_league = custom_name
-                    st.rerun()
+        with st.expander("🔐 Admin: Upload a new league"):
+            admin_pass = st.text_input("Admin password", type="password", key="admin_pass")
+            if admin_pass == st.secrets.get("ADMIN_PASSWORD", "waseef123"):
+                uploaded_file = st.file_uploader("Upload Cricket CSV zip", type=["zip"])
+                custom_name   = st.text_input("League name", placeholder="e.g. SA20, LPL, MLC...")
+                if uploaded_file and custom_name:
+                    if st.button("Load uploaded data"):
+                        st.markdown(f"### ⏳ Loading **{custom_name}**...")
+                        pb = st.progress(0)
+                        st_txt = st.empty()
+                        pb.progress(0.05)
+                        matches_df, deliveries_df = load_data_from_zip(uploaded_file)
+                        _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+                        st.session_state.active_league = custom_name
+                        st.rerun()
+            elif admin_pass:
+                st.error("❌ Incorrect password")
     else:
         # No leagues in data/ folder — show upload
         st.markdown("## 👋 Welcome to Waseef Analytical Portal")
