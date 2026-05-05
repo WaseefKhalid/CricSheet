@@ -64,12 +64,14 @@ st.markdown("""
 # ── Header ────────────────────────────────────────────────────────────────────
 _active = st.session_state.get("active_league")
 
-st.title("🏏 Waseef Analytical Portal")
-if _active:
-    st.caption(f"📊 Currently viewing: **{_active}**")
-else:
-    st.caption("Transforming ball-by-ball cricket data into deep insights")
-st.markdown("🔗 [Connect on LinkedIn — Waseef Khalid Khan](https://www.linkedin.com/in/waseef-khalid-khan-366951237)")
+_, col, _ = st.columns([1, 3, 1])
+with col:
+    st.markdown("<h1 style='text-align:center;'>🏏 Waseef Analytical Portal</h1>", unsafe_allow_html=True)
+    if _active:
+        st.markdown(f"<p style='text-align:center;color:#1DB954;font-weight:600;'>📊 {_active}</p>", unsafe_allow_html=True)
+    else:
+        st.markdown("<p style='text-align:center;color:#8b949e;'>Transforming ball-by-ball cricket data into deep insights</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>🔗 <a href='https://www.linkedin.com/in/waseef-khalid-khan-366951237' target='_blank'>Connect on LinkedIn — Waseef Khalid Khan</a></p>", unsafe_allow_html=True)
 st.divider()
 
 # ── Session State ─────────────────────────────────────────────────────────────
