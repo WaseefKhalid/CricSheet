@@ -277,3 +277,201 @@ def get_toss_stats(matches: pd.DataFrame) -> pd.DataFrame:
     )
     stats["win_after_toss_%"] = (stats["match_wins"] / stats["toss_wins"] * 100).round(1)
     return stats.sort_values("toss_wins", ascending=False).reset_index(drop=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLAYER PROFILE STATS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_player_profile(
+    player_name: str,
+    deliveries: pd.DataFrame,
+    matches: pd.DataFrame,
+) -> dict:
+    """
+    Return a comprehensive profile dict for a single player covering:
+    batting, bowling, win/loss splits, MOM awards, per-team & per-venue breakdowns.
+    """
+    result = {}
+
+    # ── helpers ──────────────────────────────────────────────────────────────
+    def _win_match_ids(team_col):
+        """match_ids where this player's team won."""
+        # find matches player appeared in
+        player_matches = deliveries[
+            (deliveries["striker"] == player_name) |
+            (deliveries["non_striker"] == player_name) |
+            (deliveries["bowler"] == player_name)
+        ]["match_id"].unique()
+        m = matches[matches["match_id"].isin(player_matches)]
+        # batting team for player in each match
+        bat_team = (
+            deliveries[deliveries["striker"] == player_name][["match_id", "batting_team"]]
+            .drop_duplicates("match_id")
+        )
+        merged = m.merge(bat_team, on="match_id", how="left")
+        won = merged[merged["winner"] == merged["batting_team"]]["match_id"].tolist()
+        lost = merged[
+            merged["winner"].notna() &
+            (merged["winner"] != "") &
+            (merged["winner"] != merged["batting_team"])
+        ]["match_id"].tolist()
+        return set(won), set(lost)
+
+    win_ids, loss_ids = _win_match_ids(None)
+
+    # ── BATTING ──────────────────────────────────────────────────────────────
+    bat_df = deliveries[deliveries["striker"] == player_name].copy()
+
+    if not bat_df.empty:
+        # overall
+        total_runs   = int(bat_df["runs_off_bat"].sum())
+        balls_faced  = int((bat_df["wides"] == 0).sum())
+        innings_list = bat_df.groupby(["match_id", "innings"])["runs_off_bat"].sum()
+        innings_n    = len(innings_list)
+        dismissed    = int(
+            deliveries[
+                (deliveries["player_dismissed"] == player_name) &
+                deliveries["wicket_type"].notna()
+            ].shape[0]
+        )
+        not_outs  = innings_n - dismissed
+        average   = round(total_runs / dismissed, 2) if dismissed > 0 else float(total_runs)
+        strike_rt = round(total_runs / balls_faced * 100, 2) if balls_faced > 0 else 0.0
+        hundreds  = int((innings_list >= 100).sum())
+        fifties   = int(((innings_list >= 50) & (innings_list < 100)).sum())
+        highest   = int(innings_list.max()) if innings_n > 0 else 0
+        fours     = int(bat_df[bat_df["runs_off_bat"] == 4].shape[0])
+        sixes     = int(bat_df[bat_df["runs_off_bat"] == 6].shape[0])
+
+        # win / loss splits
+        bat_wins  = bat_df[bat_df["match_id"].isin(win_ids)]
+        bat_loss  = bat_df[bat_df["match_id"].isin(loss_ids)]
+        runs_wins = int(bat_wins["runs_off_bat"].sum())
+        runs_loss = int(bat_loss["runs_off_bat"].sum())
+
+        # runs vs each team
+        vs_team = (
+            bat_df.groupby("bowling_team")["runs_off_bat"]
+            .sum()
+            .reset_index()
+            .rename(columns={"bowling_team": "opponent", "runs_off_bat": "runs"})
+            .sort_values("runs", ascending=False)
+        )
+
+        # runs at each venue
+        bat_venue = bat_df.merge(matches[["match_id", "venue"]], on="match_id", how="left")
+        vs_venue_bat = (
+            bat_venue.groupby("venue")["runs_off_bat"]
+            .sum()
+            .reset_index()
+            .rename(columns={"runs_off_bat": "runs"})
+            .sort_values("runs", ascending=False)
+        )
+
+        result["batting"] = {
+            "innings": innings_n, "runs": total_runs, "balls_faced": balls_faced,
+            "highest": highest, "average": average, "strike_rate": strike_rt,
+            "hundreds": hundreds, "fifties": fifties, "not_outs": not_outs,
+            "fours": fours, "sixes": sixes,
+            "runs_in_wins": runs_wins, "runs_in_losses": runs_loss,
+            "vs_team": vs_team, "vs_venue": vs_venue_bat,
+        }
+    else:
+        result["batting"] = None
+
+    # ── BOWLING ──────────────────────────────────────────────────────────────
+    bowl_df = deliveries[deliveries["bowler"] == player_name].copy()
+
+    if not bowl_df.empty:
+        legal      = bowl_df[(bowl_df["wides"] == 0) & (bowl_df["noballs"] == 0)]
+        balls      = int(len(legal))
+        overs      = round(balls // 6 + (balls % 6) / 10, 1)
+        bowl_df["runs_conceded"] = bowl_df["runs_off_bat"] + bowl_df["wides"] + bowl_df["noballs"]
+        runs_given = int(bowl_df["runs_conceded"].sum())
+        wickets_df = bowl_df[
+            bowl_df["wicket_type"].notna() &
+            (~bowl_df["wicket_type"].str.lower().isin(["run out", "retired hurt", "obstructing the field"]))
+        ]
+        wickets   = int(len(wickets_df))
+        economy   = round(runs_given / balls * 6, 2) if balls > 0 else 0.0
+        bowl_avg  = round(runs_given / wickets, 2) if wickets > 0 else None
+        bowl_sr   = round(balls / wickets, 2) if wickets > 0 else None
+
+        # win / loss splits
+        wkts_wins = int(wickets_df[wickets_df["match_id"].isin(win_ids)].shape[0])
+        wkts_loss = int(wickets_df[wickets_df["match_id"].isin(loss_ids)].shape[0])
+
+        # wickets vs each team
+        vs_team_bowl = (
+            wickets_df.groupby("batting_team")
+            .size()
+            .reset_index(name="wickets")
+            .rename(columns={"batting_team": "opponent"})
+            .sort_values("wickets", ascending=False)
+        )
+
+        # wickets at each venue
+        bowl_venue = bowl_df.merge(matches[["match_id", "venue"]], on="match_id", how="left")
+        wkt_venue_df = bowl_venue[
+            bowl_venue["wicket_type"].notna() &
+            (~bowl_venue["wicket_type"].str.lower().isin(["run out", "retired hurt"]))
+        ]
+        vs_venue_bowl = (
+            wkt_venue_df.groupby("venue")
+            .size()
+            .reset_index(name="wickets")
+            .sort_values("wickets", ascending=False)
+        )
+
+        result["bowling"] = {
+            "overs": overs, "runs_given": runs_given, "wickets": wickets,
+            "economy": economy, "average": bowl_avg, "bowling_sr": bowl_sr,
+            "wickets_in_wins": wkts_wins, "wickets_in_losses": wkts_loss,
+            "vs_team": vs_team_bowl, "vs_venue": vs_venue_bowl,
+        }
+    else:
+        result["bowling"] = None
+
+    # ── MAN OF MATCH ─────────────────────────────────────────────────────────
+    if "player_of_match" in matches.columns:
+        mom_matches = matches[matches["player_of_match"] == player_name].copy()
+        total_mom   = len(mom_matches)
+
+        # MOM vs each opponent
+        # find opponent for each MOM match
+        player_bat_team = (
+            deliveries[deliveries["striker"] == player_name][["match_id", "batting_team"]]
+            .drop_duplicates("match_id")
+        )
+        mom_merged = mom_matches.merge(player_bat_team, on="match_id", how="left")
+        mom_merged["opponent"] = np.where(
+            mom_merged["team1"] == mom_merged["batting_team"],
+            mom_merged["team2"],
+            mom_merged["team1"],
+        )
+
+        mom_vs_team = (
+            mom_merged.groupby("opponent")
+            .size()
+            .reset_index(name="mom_awards")
+            .sort_values("mom_awards", ascending=False)
+        )
+
+        mom_vs_venue = (
+            mom_matches.groupby("venue")
+            .size()
+            .reset_index(name="mom_awards")
+            .sort_values("mom_awards", ascending=False)
+        ) if "venue" in mom_matches.columns else pd.DataFrame()
+
+        result["mom"] = {
+            "total": total_mom,
+            "vs_team": mom_vs_team,
+            "vs_venue": mom_vs_venue,
+            "matches": mom_matches[["match_id", "date", "venue", "team1", "team2", "season"]],
+        }
+    else:
+        result["mom"] = {"total": 0, "vs_team": pd.DataFrame(), "vs_venue": pd.DataFrame(), "matches": pd.DataFrame()}
+
+    return result
