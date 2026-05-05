@@ -1,6 +1,8 @@
 import zipfile
 import io
+import hashlib
 import pandas as pd
+import streamlit as st
 from typing import Tuple
 
 
@@ -59,6 +61,7 @@ def parse_info_csv(content: str, match_id: str) -> dict:
     return record
 
 
+@st.cache_data(show_spinner=False)
 def load_data_from_zip(uploaded_file) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Read a ZIP of PSL CSVs.
