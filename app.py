@@ -436,24 +436,32 @@ with tab1:
             selected_positions = []
 
     # Compute batting position: rank of first ball faced per innings per match
-    bat_del = bat_deliveries.copy()
+    bat_del = bat_deliveries.reset_index(drop=True).copy()
     if use_pos_filter and selected_positions:
-        # Compute batting order position per match+innings
-        bat_del["ball_num"] = pd.to_numeric(bat_del["ball"], errors="coerce")
-        first_ball = (
-            bat_del[bat_del["wides"] == 0]
-            .sort_values("ball_num")
-            .groupby(["match_id", "innings", "striker"])
-            .first()
-            .reset_index()[["match_id", "innings", "striker", "ball_num"]]
-        )
-        first_ball["position"] = (
-            first_ball.groupby(["match_id", "innings"])["ball_num"]
-            .rank(method="first")
-            .astype(int)
-        )
-        valid_pairs = first_ball[first_ball["position"].isin(selected_positions)][["match_id", "innings", "striker"]]
-        bat_del = bat_del.merge(valid_pairs, on=["match_id", "innings", "striker"], how="inner")
+        try:
+            bat_del["ball_num"] = pd.to_numeric(bat_del["ball"], errors="coerce")
+            # Get first ball each batter faced per match+innings
+            legal = bat_del[bat_del["wides"] == 0][["match_id", "innings", "striker", "ball_num"]].copy()
+            legal = legal.dropna(subset=["ball_num"])
+            first_ball = (
+                legal.sort_values("ball_num")
+                .drop_duplicates(subset=["match_id", "innings", "striker"], keep="first")
+                .reset_index(drop=True)
+            )
+            # Rank batters by their first ball in each innings = batting position
+            first_ball["position"] = (
+                first_ball.sort_values("ball_num")
+                .groupby(["match_id", "innings"])["ball_num"]
+                .rank(method="first")
+                .astype(int)
+            )
+            valid_pairs = (
+                first_ball[first_ball["position"].isin(selected_positions)]
+                [["match_id", "innings", "striker"]]
+            )
+            bat_del = bat_del.merge(valid_pairs, on=["match_id", "innings", "striker"], how="inner")
+        except Exception as e:
+            st.warning(f"Position filter error: {e}")
 
     # Always start from precomputed cache — fast
     batting_base = _cache["batting_all"].copy()
