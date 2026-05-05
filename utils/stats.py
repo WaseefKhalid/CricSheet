@@ -281,6 +281,76 @@ def get_toss_stats(matches: pd.DataFrame) -> pd.DataFrame:
 
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BATTING FIRST vs BATTING SECOND STATS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_batting_order_stats(matches: pd.DataFrame, deliveries: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each team: matches played, won batting first, won batting second,
+    win% batting first, win% batting second.
+    """
+    if matches.empty or deliveries.empty:
+        return pd.DataFrame()
+
+    # Find which team batted first in each match (innings == 1)
+    inn1 = (
+        deliveries[pd.to_numeric(deliveries["innings"], errors="coerce") == 1]
+        [["match_id", "batting_team"]]
+        .drop_duplicates("match_id")
+        .rename(columns={"batting_team": "bat_first_team"})
+    )
+
+    df = matches.merge(inn1, on="match_id", how="left")
+    df["bat_second_team"] = np.where(
+        df["bat_first_team"] == df["team1"], df["team2"], df["team1"]
+    )
+
+    teams = sorted(set(
+        list(df["team1"].dropna()) + list(df["team2"].dropna())
+    ))
+
+    records = []
+    for team in teams:
+        # All matches this team played
+        played_df = df[(df["team1"] == team) | (df["team2"] == team)]
+        total = len(played_df)
+        if total == 0:
+            continue
+
+        # Batting first matches
+        bat_first_df  = played_df[played_df["bat_first_team"] == team]
+        bat_second_df = played_df[played_df["bat_second_team"] == team]
+
+        bf_total = len(bat_first_df)
+        bs_total = len(bat_second_df)
+
+        bf_won = int((bat_first_df["winner"] == team).sum())
+        bs_won = int((bat_second_df["winner"] == team).sum())
+
+        bf_pct = round(bf_won / bf_total * 100, 1) if bf_total > 0 else 0.0
+        bs_pct = round(bs_won / bs_total * 100, 1) if bs_total > 0 else 0.0
+
+        total_won = bf_won + bs_won
+        total_pct = round(total_won / total * 100, 1) if total > 0 else 0.0
+
+        records.append({
+            "team":              team,
+            "matches":           total,
+            "won":               total_won,
+            "win_%":             total_pct,
+            "bat_first":         bf_total,
+            "won_bat_first":     bf_won,
+            "win%_bat_first":    bf_pct,
+            "bat_second":        bs_total,
+            "won_bat_second":    bs_won,
+            "win%_bat_second":   bs_pct,
+        })
+
+    return pd.DataFrame(records).sort_values("won", ascending=False).reset_index(drop=True)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PLAYER PROFILE STATS
 # ─────────────────────────────────────────────────────────────────────────────
