@@ -21,7 +21,7 @@ from components.charts import (
 )
 
 st.set_page_config(
-    page_title="Waseef Analytics Portal",
+    page_title="PSL Cricket Analytics",
     page_icon="🏏",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -63,7 +63,7 @@ if "deliveries_df" not in st.session_state:
     st.session_state.deliveries_df = None
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown('<div class="main-header">🏏 Waseef Analytics Portal</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🏏 PSL Cricket Analytics Portal</div>', unsafe_allow_html=True)
 
 # ── File Upload ───────────────────────────────────────────────────────────────
 with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.session_state.matches_df is None):
@@ -315,8 +315,15 @@ with tab6:
         if not selected_player:
             st.info("👆 Select a player above to view their full profile.")
         else:
-            with st.spinner(f"Loading profile for {selected_player}..."):
-                profile = get_player_profile(selected_player, final_deliveries, final_matches)
+            @st.cache_data(show_spinner=False)
+            def _cached_profile(name, del_hash, match_hash):
+                return get_player_profile(name, final_deliveries, final_matches)
+
+            del_hash   = len(final_deliveries)
+            match_hash = len(final_matches)
+
+            with st.spinner(f"⏳ Loading profile for {selected_player}..."):
+                profile = _cached_profile(selected_player, del_hash, match_hash)
 
             st.markdown(f"## 🏏 {selected_player}")
             st.markdown("---")
