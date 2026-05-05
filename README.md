@@ -1,13 +1,13 @@
-# 🏏 PSL Cricket Analytics Portal
+# 🏏 Waseef Analytical Portal
 
-A Streamlit-based cricket analytics dashboard for Pakistan Super League (PSL) data.
-Upload your ball-by-ball CSV data and explore stats like ESPNcricinfo.
+A Streamlit-based cricket analytics dashboard for any cricket league.
+Upload your ball-by-ball CSV data and explore deep stats like ESPNcricinfo.
 
 ---
 
 ## 🚀 Features
 
-- 📂 **Upload ZIP** — drop your entire PSL CSV folder as a ZIP
+- 📂 **Upload ZIP** — drop your entire cricket CSV folder as a ZIP
 - 🔍 **Chained Filters** — Season → Team → Venue → Toss → Winner (each filter narrows the next)
 - 🏏 **Batting Stats** — Runs, Average, Strike Rate, 100s, 50s, Highest Score
 - 🎳 **Bowling Stats** — Wickets, Economy, Average, Bowling SR, Maidens
@@ -23,7 +23,7 @@ Upload your ball-by-ball CSV data and explore stats like ESPNcricinfo.
 Your ZIP should contain pairs of CSV files per match:
 
 ```
-psl_data.zip
+cricket_data.zip
 ├── 959175.csv          ← ball-by-ball data
 ├── 959175_info.csv     ← match info/metadata
 ├── 959177.csv
@@ -50,8 +50,8 @@ info,winner,Quetta Gladiators
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/psl-cricket-analytics.git
-cd psl-cricket-analytics
+git clone https://github.com/YOUR_USERNAME/cricsheet.git
+cd cricsheet
 
 # 2. Create virtual environment
 python -m venv venv
@@ -93,7 +93,7 @@ Then open http://localhost:8501 in your browser.
 ## 🗂️ Project Structure
 
 ```
-psl-cricket-analytics/
+cricsheet/
 ├── app.py                    # Main Streamlit app
 ├── requirements.txt
 ├── .streamlit/
