@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import os
 from utils.data_loader import load_data_from_zip
 from utils.filters import apply_filters, get_filter_options
 from utils.stats import (
@@ -22,6 +23,9 @@ from components.charts import (
     plot_top_batsmen,
     plot_top_bowlers,
 )
+
+# ── Data path — place your ZIP here and it auto-loads for all users ───────────
+DATA_PATH = "data/cricket_data.zip"  # put your zip in /data folder in repo
 
 st.set_page_config(
     page_title="Waseef Analytical Portal",
@@ -95,90 +99,101 @@ if "deliveries_df" not in st.session_state:
 if "cached" not in st.session_state:
     st.session_state.cached = None
 
-# ── File Upload ───────────────────────────────────────────────────────────────
-with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.session_state.matches_df is None):
-    uploaded_file = st.file_uploader(
-        "Upload your Cricket CSV zip file",
-        type=["zip"],
-        help="Upload the ZIP folder containing all match CSVs and info CSVs",
-    )
-    if uploaded_file:
-        st.markdown("### ⏳ Loading & Computing All Stats — please wait...")
-        progress_bar = st.progress(0)
-        status_text  = st.empty()
 
-        def _step(msg, pct):
-            status_text.markdown(
-                f'<div class="progress-label">{msg} &nbsp;&nbsp; <b>{int(pct*100)}%</b></div>',
+def _compute_and_cache(matches_df, deliveries_df, progress_bar, status_text):
+    """Compute all stats and store in session state."""
+    def _step(msg, pct):
+        status_text.markdown(
+            f'<div class="progress-label">{msg} &nbsp;&nbsp; <b>{int(pct*100)}%</b></div>',
+            unsafe_allow_html=True,
+        )
+        progress_bar.progress(pct)
+
+    _step("🏏 Computing batting stats...", 0.20)
+    batting_all = get_batting_stats(deliveries_df, min_innings=1)
+
+    _step("🎳 Computing bowling stats...", 0.38)
+    bowling_all = get_bowling_stats(deliveries_df, min_overs=1)
+
+    _step("📋 Computing match & team results...", 0.54)
+    match_stats_all     = get_match_stats(matches_df)
+    team_stats_all      = get_team_stats(matches_df)
+    toss_stats_all      = get_toss_stats(matches_df)
+    bat_order_stats_all = get_batting_order_stats(matches_df, deliveries_df)
+    pom_stats_all       = get_player_of_match_stats(matches_df)
+
+    _step("👤 Building all player profiles...", 0.75)
+    all_profiles = precompute_all_profiles(deliveries_df, matches_df)
+
+    _step("✅ Finalising & indexing...", 0.93)
+    deliveries_df = deliveries_df.set_index("match_id", drop=False)
+
+    st.session_state.matches_df    = matches_df
+    st.session_state.deliveries_df = deliveries_df
+    st.session_state.cached = {
+        "batting_all":     batting_all,
+        "bowling_all":     bowling_all,
+        "match_stats":     match_stats_all,
+        "team_stats":      team_stats_all,
+        "toss_stats":      toss_stats_all,
+        "bat_order_stats": bat_order_stats_all,
+        "pom_stats":       pom_stats_all,
+        "all_profiles":    all_profiles,
+    }
+    progress_bar.progress(1.0)
+    status_text.markdown("")
+
+
+# ── AUTO-LOAD from data/ folder (no upload needed for users) ─────────────────
+if st.session_state.matches_df is None:
+    if os.path.exists(DATA_PATH):
+        st.markdown("### ⏳ Loading data — please wait...")
+        pb = st.progress(0)
+        st_txt = st.empty()
+        st_txt.markdown(
+            '<div class="progress-label">📂 Reading data file... &nbsp; <b>5%</b></div>',
+            unsafe_allow_html=True,
+        )
+        pb.progress(0.05)
+        with open(DATA_PATH, "rb") as f:
+            matches_df, deliveries_df = load_data_from_zip(f)
+        _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+        st.rerun()
+
+# ── ADMIN UPLOAD (only shown when no data file exists in repo) ────────────────
+if st.session_state.matches_df is None:
+    with st.expander("📂 Upload Data", expanded=True):
+        st.info(
+            "No pre-loaded data found. Upload a ZIP file to get started. "
+            "To make data permanent, place `cricket_data.zip` in the `/data` folder of your repo."
+        )
+        uploaded_file = st.file_uploader(
+            "Upload Cricket CSV zip file", type=["zip"],
+        )
+        if uploaded_file:
+            st.markdown("### ⏳ Loading & Computing All Stats...")
+            pb = st.progress(0)
+            st_txt = st.empty()
+            st_txt.markdown(
+                '<div class="progress-label">📂 Parsing CSV files... &nbsp; <b>5%</b></div>',
                 unsafe_allow_html=True,
             )
-            progress_bar.progress(pct)
+            pb.progress(0.05)
+            matches_df, deliveries_df = load_data_from_zip(uploaded_file)
+            _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
+            st.success(
+                f"✅ Ready! **{len(st.session_state.matches_df)} matches** · "
+                f"**{len(st.session_state.deliveries_df):,} deliveries** · "
+                f"**{len(st.session_state.cached['all_profiles'])} players** — all cached!"
+            )
+            st.rerun()
 
-        # 1 — Parse all CSVs
-        _step("📂 Parsing CSV files...", 0.10)
-        matches_df, deliveries_df = load_data_from_zip(uploaded_file)
-
-        # 2 — Batting stats (all, min 1 innings)
-        _step("🏏 Computing batting stats...", 0.30)
-        batting_all = get_batting_stats(deliveries_df, min_innings=1)
-
-        # 3 — Bowling stats (all, min 1 over)
-        _step("🎳 Computing bowling stats...", 0.50)
-        bowling_all = get_bowling_stats(deliveries_df, min_overs=1)
-
-        # 4 — Match stats
-        _step("📋 Computing match results...", 0.65)
-        match_stats_all = get_match_stats(matches_df)
-        team_stats_all  = get_team_stats(matches_df)
-        toss_stats_all       = get_toss_stats(matches_df)
-        bat_order_stats_all  = get_batting_order_stats(matches_df, deliveries_df)
-        pom_stats_all   = get_player_of_match_stats(matches_df)
-
-        # 5 — Player profiles (heaviest — done once here)
-        _step("👤 Building all player profiles...", 0.80)
-        all_profiles = precompute_all_profiles(deliveries_df, matches_df)
-
-        # 6 — Store everything in session state
-        _step("✅ Finalising & caching...", 0.95)
-        # Set index on match_id for fast .loc[] filtering later
-        deliveries_df = deliveries_df.set_index("match_id", drop=False)
-        st.session_state.matches_df       = matches_df
-        st.session_state.deliveries_df    = deliveries_df
-        st.session_state.cached = {
-            "batting_all":    batting_all,
-            "bowling_all":    bowling_all,
-            "match_stats":    match_stats_all,
-            "team_stats":     team_stats_all,
-            "toss_stats":     toss_stats_all,
-            "bat_order_stats": bat_order_stats_all,
-            "pom_stats":      pom_stats_all,
-            "all_profiles":   all_profiles,
-        }
-
-        progress_bar.progress(1.0)
-        status_text.markdown("")
-        st.success(
-            f"✅ Ready! **{len(matches_df)} matches** · **{len(deliveries_df):,} deliveries** · "
-            f"**{len(all_profiles)} player profiles** — all computed & cached!"
-        )
-
-# ── Guard: no data yet ────────────────────────────────────────────────────────
+# ── Guard ─────────────────────────────────────────────────────────────────────
 if st.session_state.matches_df is None or st.session_state.cached is None:
     st.markdown("""
     ### 👋 Welcome to Waseef Analytical Portal
-
-    A professional cricket analytics dashboard for ball-by-ball cricket data,
-    built by **Waseef Khalid Khan** — a passionate cricket fan and data enthusiast.
-
-    **What you can explore:**
-    - 🏏 Batting stats with position filters
-    - 🎳 Bowling stats with over-phase filters
-    - 📋 Full match results & scorecards
-    - 🏆 Team win/loss records & toss analysis
-    - 📈 Season-by-season visual trends
-    - 👤 Deep player profiles with win/loss splits
-
-    **To get started:** Upload your Cricket CSV zip file above ☝️
+    A professional cricket analytics dashboard built by **Waseef Khalid Khan**.
+    Data is loading or not yet available — please wait or upload a ZIP file above.
     """)
     st.stop()
 
@@ -281,6 +296,8 @@ final_deliveries = deliveries_df[deliveries_df["match_id"].isin(valid_match_ids)
 
 # For batting/bowling team filters, use precomputed player lists from cache
 # instead of scanning delivery rows — just filter the cached stats by player name
+# Filter deliveries to only rows where selected team is batting/bowling
+# This ensures stats show ONLY that team's own players, not opposition
 if eff_batting_teams:
     bat_deliveries = final_deliveries[final_deliveries["batting_team"].isin(eff_batting_teams)]
 else:
@@ -292,8 +309,16 @@ else:
     bowl_deliveries = final_deliveries
 
 # Precompute valid player sets once — used by all tabs below
+# These are the team's OWN players only (batting_team = team → only their batters)
 valid_bat_players  = set(bat_deliveries["striker"].dropna().unique()) if eff_batting_teams else None
 valid_bowl_players = set(bowl_deliveries["bowler"].dropna().unique()) if eff_bowling_teams else None
+
+# For player profile tab: union of both to get all squad members
+valid_team_players = None
+if selected_main_team:
+    _bat_p  = valid_bat_players  or set()
+    _bowl_p = valid_bowl_players or set(final_deliveries["bowler"].dropna().unique())
+    valid_team_players = _bat_p | _bowl_p
 
 # ── KPI Row ───────────────────────────────────────────────────────────────────
 st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
@@ -604,12 +629,8 @@ with tab6:
     all_profiles = _cache["all_profiles"]
 
     # Filter player list to selected main team if active
-    if selected_main_team:
-        team_players = (
-            (valid_bat_players or set()) |
-            (valid_bowl_players or set(final_deliveries["bowler"].dropna().unique()))
-        )
-        all_players = sorted([p for p in all_profiles.keys() if p in team_players])
+    if valid_team_players is not None:
+        all_players = sorted([p for p in all_profiles.keys() if p in valid_team_players])
     else:
         all_players = sorted(all_profiles.keys())
 
