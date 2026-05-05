@@ -578,12 +578,57 @@ with tab3:
     st.dataframe(match_stats, use_container_width=True, height=500)
 
     st.markdown('<div class="section-header">🥇 Player of the Match</div>', unsafe_allow_html=True)
-    pom = _cache["pom_stats"]
-    col1, col2 = st.columns(2)
-    with col1:
-        st.dataframe(pom, use_container_width=True, height=400)
-    with col2:
-        plot_top_batsmen(pom, x="player_of_match", y="awards", title="Top Player of Match Winners")
+
+    # Build POM from filtered matches (not full cache — respects current filters)
+    filtered_match_ids = set(final_matches["match_id"].tolist())
+
+    # Full match detail with team info for For/Against logic
+    match_detail = _cache["match_stats"].copy()
+    match_detail = match_detail[match_detail["match_id"].isin(filtered_match_ids)]
+    match_detail = match_detail[match_detail["player_of_match"].notna() &
+                                (match_detail["player_of_match"] != "")]
+
+    # For/Against toggle — only show when team is selected
+    if selected_main_team:
+        pom_mode = st.radio(
+            "Show Player of Match:",
+            ["🏆 For (selected team players)", "⚔️ Against (opposition players)", "📋 All"],
+            horizontal=True,
+            key="pom_mode"
+        )
+
+        # Get players who play FOR the selected team
+        team_players = valid_team_players or set()
+
+        if "For" in pom_mode:
+            # POM winners who are FROM the selected team
+            match_detail = match_detail[match_detail["player_of_match"].isin(team_players)]
+            pom_title = f"Top MOM Winners — {', '.join(selected_main_team)} Players"
+        elif "Against" in pom_mode:
+            # POM winners who are opposition (NOT from selected team)
+            match_detail = match_detail[~match_detail["player_of_match"].isin(team_players)]
+            pom_title = f"Top MOM Winners — Against {', '.join(selected_main_team)}"
+        else:
+            pom_title = "All Player of Match Winners"
+    else:
+        pom_title = "Top Player of Match Winners"
+
+    # Compute POM counts from filtered data
+    if not match_detail.empty:
+        pom = (
+            match_detail["player_of_match"]
+            .value_counts()
+            .reset_index()
+        )
+        pom.columns = ["player_of_match", "awards"]
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.dataframe(pom, use_container_width=True, height=400)
+        with col2:
+            plot_top_batsmen(pom.head(10), x="player_of_match", y="awards", title=pom_title)
+    else:
+        st.info("No Player of the Match data for current selection.")
 
     st.download_button(
         "⬇️ Download Match Results CSV",
