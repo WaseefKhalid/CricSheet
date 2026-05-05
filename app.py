@@ -271,6 +271,124 @@ st.markdown("""
     /* ── Hide Streamlit branding ── */
     #MainMenu, footer, header { visibility: hidden; }
     .block-container { padding-top: 0 !important; max-width: 100% !important; }
+
+    /* ── Filter Panel ── */
+    .filter-panel {
+        background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
+        border: 1px solid #1a3550;
+        border-radius: 12px;
+        padding: 1.2rem 1.4rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    }
+    .filter-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #8b949e;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-bottom: 0.3rem;
+    }
+
+    /* ── Stat Cards Row ── */
+    .stat-row {
+        display: flex;
+        gap: 0.8rem;
+        margin-bottom: 1.2rem;
+        flex-wrap: wrap;
+    }
+    .stat-card {
+        flex: 1;
+        min-width: 100px;
+        background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
+        border: 1px solid #1a3550;
+        border-radius: 10px;
+        padding: 0.9rem 1rem;
+        text-align: center;
+    }
+    .stat-card-val {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #ffffff;
+        line-height: 1.1;
+    }
+    .stat-card-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #8b949e;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 0.2rem;
+    }
+    .stat-card-accent { border-top: 2px solid #1DB954; }
+    .stat-card-accent2 { border-top: 2px solid #00d4ff; }
+    .stat-card-accent3 { border-top: 2px solid #f59e0b; }
+
+    /* ── Table Header ── */
+    .table-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.8rem;
+    }
+    .table-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    .table-count {
+        font-size: 0.78rem;
+        color: #8b949e;
+        background: #1a2332;
+        padding: 0.2rem 0.6rem;
+        border-radius: 10px;
+    }
+
+    /* ── Number inputs ── */
+    .stNumberInput > div > div > input {
+        background: #0d1f2d !important;
+        border: 1px solid #1a3550 !important;
+        color: #ffffff !important;
+        border-radius: 8px !important;
+    }
+
+    /* ── Caption ── */
+    .stCaption { color: #1DB954 !important; font-weight: 500 !important; }
+
+    /* ── Download button ── */
+    .stDownloadButton > button {
+        background: transparent !important;
+        border: 1px solid #1a3550 !important;
+        color: #8b949e !important;
+        font-size: 0.82rem !important;
+        box-shadow: none !important;
+    }
+    .stDownloadButton > button:hover {
+        border-color: #1DB954 !important;
+        color: #1DB954 !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+
+    /* ── Sidebar labels ── */
+    .stSidebar .stMarkdown h4 {
+        color: #58a6ff !important;
+        font-size: 0.75rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-top: 1rem !important;
+    }
+
+    /* ── Radio buttons ── */
+    .stRadio label { color: #c9d1d9 !important; font-size: 0.88rem !important; }
+    .stRadio [data-testid="stMarkdownContainer"] p { color: #8b949e !important; }
+
+    /* ── Success/warning/error ── */
+    .stSuccess { background: rgba(29,185,84,0.1) !important; border: 1px solid rgba(29,185,84,0.3) !important; border-radius: 8px !important; }
+    .stWarning { background: rgba(245,158,11,0.1) !important; border: 1px solid rgba(245,158,11,0.3) !important; border-radius: 8px !important; }
+
+    /* ── Info box ── */
+    .stInfo { background: rgba(0,212,255,0.08) !important; border: 1px solid rgba(0,212,255,0.2) !important; border-radius: 8px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -628,21 +746,27 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.markdown('<div class="section-header">🏏 Batting Statistics</div>', unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 1, 2])
+    st.markdown('<div class="filter-panel">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        min_innings = st.number_input("Min Innings", min_value=1, value=3, step=1)
-        sort_by_bat = st.selectbox("Sort By", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"])
+        st.markdown('<div class="filter-label">Minimum Innings</div>', unsafe_allow_html=True)
+        min_innings = st.number_input("", min_value=1, value=3, step=1, key="min_inn", label_visibility="collapsed")
     with col2:
-        use_pos_filter = st.toggle("🔢 Filter by Batting Position", value=False)
+        st.markdown('<div class="filter-label">Sort By</div>', unsafe_allow_html=True)
+        sort_by_bat = st.selectbox("", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"], key="sort_bat", label_visibility="collapsed")
+    with col3:
+        st.markdown('<div class="filter-label">Batting Position Filter</div>', unsafe_allow_html=True)
+        use_pos_filter = st.toggle("🔢 Enable Position Filter", value=False)
         if use_pos_filter:
             selected_positions = st.multiselect(
-                "Batting Position(s)",
+                "Position(s)",
                 options=list(range(1, 12)),
                 default=[1, 2],
-                format_func=lambda x: f"Position {x}",
+                format_func=lambda x: f"#{x}",
             )
         else:
             selected_positions = []
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Compute batting position: rank of first ball faced per innings per match
     bat_del = bat_deliveries.reset_index(drop=True).copy()
@@ -689,16 +813,14 @@ with tab1:
     batting.index += 1
 
     if use_pos_filter and selected_positions:
-        st.caption(f"Showing stats AT position(s) {', '.join(map(str, selected_positions))} only — runs/avg reflect only innings at that position")
+        st.caption(f"📍 Stats at position(s) {', '.join(map(str, selected_positions))} only")
 
+    col_th, col_dl = st.columns([6,1])
+    with col_th:
+        st.markdown(f'<div class="table-header"><span class="table-title">Batters</span><span class="table-count">{len(batting)} players</span></div>', unsafe_allow_html=True)
+    with col_dl:
+        st.download_button("⬇️ CSV", batting.to_csv(index=False), file_name="batting_stats.csv", mime="text/csv")
     st.dataframe(batting, use_container_width=True, height=500)
-
-    st.download_button(
-        "⬇️ Download Batting Stats CSV",
-        batting.to_csv(index=False),
-        file_name="batting_stats.csv",
-        mime="text/csv",
-    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2 — BOWLING
@@ -706,12 +828,16 @@ with tab1:
 with tab2:
     st.markdown('<div class="section-header">🎳 Bowling Statistics</div>', unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 1, 2])
+    st.markdown('<div class="filter-panel">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        min_overs = st.number_input("Min Overs", min_value=1, value=5, step=1)
-        sort_by_bowl = st.selectbox("Sort By", ["wickets", "economy", "average", "bowling_sr", "overs"])
+        st.markdown('<div class="filter-label">Minimum Overs</div>', unsafe_allow_html=True)
+        min_overs = st.number_input("", min_value=1, value=5, step=1, key="min_ovs", label_visibility="collapsed")
+        st.markdown('<div class="filter-label" style="margin-top:0.5rem;">Sort By</div>', unsafe_allow_html=True)
+        sort_by_bowl = st.selectbox("", ["wickets", "economy", "average", "bowling_sr", "overs"], key="sort_bowl", label_visibility="collapsed")
     with col2:
-        use_over_filter = st.toggle("🎯 Filter by Over Number", value=False)
+        st.markdown('<div class="filter-label">Over Phase Filter</div>', unsafe_allow_html=True)
+        use_over_filter = st.toggle("🎯 Enable Over Filter", value=False)
         if use_over_filter:
             # Detect max overs from data
             max_over = 20  # default T20
@@ -772,16 +898,14 @@ with tab2:
     bowling.index += 1
 
     if use_over_filter and selected_overs:
-        st.caption(f"Showing bowling stats for over(s): {', '.join(map(str, sorted(selected_overs)))}")
+        st.caption(f"🎯 Stats for overs: {', '.join(map(str, sorted(selected_overs)))}")
 
+    col_th, col_dl = st.columns([6,1])
+    with col_th:
+        st.markdown(f'<div class="table-header"><span class="table-title">Bowlers</span><span class="table-count">{len(bowling)} players</span></div>', unsafe_allow_html=True)
+    with col_dl:
+        st.download_button("⬇️ CSV", bowling.to_csv(index=False), file_name="bowling_stats.csv", mime="text/csv")
     st.dataframe(bowling, use_container_width=True, height=500)
-
-    st.download_button(
-        "⬇️ Download Bowling Stats CSV",
-        bowling.to_csv(index=False),
-        file_name="bowling_stats.csv",
-        mime="text/csv",
-    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — MATCH RESULTS
