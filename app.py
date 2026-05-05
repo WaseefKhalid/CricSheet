@@ -463,13 +463,13 @@ with tab1:
         except Exception as e:
             st.warning(f"Position filter error: {e}")
 
-    # Always start from precomputed cache — fast
-    batting_base = _cache["batting_all"].copy()
-
-    # Apply batting position filter (needs delivery-level data — slice cache by player list)
     if use_pos_filter and selected_positions:
-        valid_players_pos = bat_del["striker"].dropna().unique()
-        batting_base = batting_base[batting_base["player"].isin(valid_players_pos)]
+        # MUST recompute from position-filtered deliveries
+        # Using cache here would show total career runs, not runs at that position
+        batting_base = get_batting_stats(bat_del.reset_index(drop=True), min_innings=1)
+    else:
+        # No position filter — use precomputed cache (fast)
+        batting_base = _cache["batting_all"].copy()
 
     # Apply batting team filter
     if valid_bat_players is not None:
@@ -480,7 +480,7 @@ with tab1:
     batting.index += 1
 
     if use_pos_filter and selected_positions:
-        st.caption(f"Showing batters who batted at position(s): {', '.join(map(str, selected_positions))}")
+        st.caption(f"Showing stats AT position(s) {', '.join(map(str, selected_positions))} only — runs/avg reflect only innings at that position")
 
     st.dataframe(batting, use_container_width=True, height=500)
 
