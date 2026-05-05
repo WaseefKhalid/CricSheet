@@ -63,7 +63,7 @@ if "deliveries_df" not in st.session_state:
     st.session_state.deliveries_df = None
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown('<div class="main-header">🏏 PSL Cricket Analytics Portal</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🏏 Waseef Analytics Portal</div>', unsafe_allow_html=True)
 
 # ── File Upload ───────────────────────────────────────────────────────────────
 with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.session_state.matches_df is None):
