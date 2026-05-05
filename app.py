@@ -102,12 +102,27 @@ selected_seasons = st.sidebar.multiselect(
 filtered_matches_temp = apply_filters(matches_df, {"season": selected_seasons})
 opts_after_season = get_filter_options(filtered_matches_temp)
 
-# Team
-selected_teams = st.sidebar.multiselect(
-    "🏟️ Team", options=opts_after_season["teams"], default=[]
+# Batting Team (for batting stats)
+st.sidebar.markdown("#### 🏏 Batting Stats Filters")
+selected_batting_teams = st.sidebar.multiselect(
+    "🏏 Batting Team", options=opts_after_season["teams"], default=[],
+    help="Show batting stats only for this team"
 )
+
+# Bowling Team (for bowling stats)
+st.sidebar.markdown("#### 🎳 Bowling Stats Filters")
+selected_bowling_teams = st.sidebar.multiselect(
+    "🎳 Bowling Team", options=opts_after_season["teams"], default=[],
+    help="Show bowling stats only for this team"
+)
+
+# Match filters (affects which matches are in scope for both)
+# Use combined team filter for match-level filtering
+selected_teams = list(set(selected_batting_teams + selected_bowling_teams))
 filtered_matches_temp = apply_filters(filtered_matches_temp, {"team": selected_teams})
 opts_after_team = get_filter_options(filtered_matches_temp)
+
+st.sidebar.markdown("#### 🔍 Match Filters")
 
 # Venue
 selected_venues = st.sidebar.multiselect(
@@ -142,7 +157,21 @@ if st.sidebar.button("🔄 Reset All Filters"):
 
 # ── Final filtered data ───────────────────────────────────────────────────────
 final_matches = filtered_matches_temp
-final_deliveries = deliveries_df[deliveries_df["match_id"].isin(final_matches["match_id"])]
+final_deliveries = deliveries_df[deliveries_df["match_id"].isin(final_matches["match_id"])].copy()
+
+# bat_deliveries — filtered by batting team if selected
+# bowl_deliveries — filtered by bowling team if selected
+# This ensures batting stats show only selected batting team's batters
+# and bowling stats show only selected bowling team's bowlers
+if selected_batting_teams:
+    bat_deliveries = final_deliveries[final_deliveries["batting_team"].isin(selected_batting_teams)]
+else:
+    bat_deliveries = final_deliveries
+
+if selected_bowling_teams:
+    bowl_deliveries = final_deliveries[final_deliveries["bowling_team"].isin(selected_bowling_teams)]
+else:
+    bowl_deliveries = final_deliveries
 
 # ── KPI Row ───────────────────────────────────────────────────────────────────
 st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
@@ -177,7 +206,7 @@ with tab1:
         min_innings = st.number_input("Min Innings", min_value=1, value=3, step=1)
         sort_by_bat = st.selectbox("Sort By", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"])
 
-    batting = get_batting_stats(final_deliveries, min_innings=min_innings)
+    batting = get_batting_stats(bat_deliveries, min_innings=min_innings)
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
     batting.index += 1
 
@@ -201,7 +230,7 @@ with tab2:
         min_overs = st.number_input("Min Overs", min_value=1, value=5, step=1)
         sort_by_bowl = st.selectbox("Sort By", ["wickets", "economy", "average", "bowling_sr", "overs"])
 
-    bowling = get_bowling_stats(final_deliveries, min_overs=min_overs)
+    bowling = get_bowling_stats(bowl_deliveries, min_overs=min_overs)
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
     bowling.index += 1
 
@@ -281,11 +310,11 @@ with tab5:
         plot_toss_impact(final_matches)
 
     st.markdown('<div class="section-header">🏏 Top 10 Run Scorers</div>', unsafe_allow_html=True)
-    bat_chart = get_batting_stats(final_deliveries, min_innings=1).sort_values("runs", ascending=False).head(10)
+    bat_chart = get_batting_stats(bat_deliveries, min_innings=1).sort_values("runs", ascending=False).head(10)
     plot_top_batsmen(bat_chart, x="player", y="runs", title="Top 10 Run Scorers")
 
     st.markdown('<div class="section-header">🎳 Top 10 Wicket Takers</div>', unsafe_allow_html=True)
-    bowl_chart = get_bowling_stats(final_deliveries, min_overs=1).sort_values("wickets", ascending=False).head(10)
+    bowl_chart = get_bowling_stats(bowl_deliveries, min_overs=1).sort_values("wickets", ascending=False).head(10)
     plot_top_bowlers(bowl_chart)
 
 # ─────────────────────────────────────────────────────────────────────────────
