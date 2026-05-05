@@ -10,6 +10,7 @@ from utils.stats import (
     get_team_stats,
     get_player_of_match_stats,
     get_toss_stats,
+    get_batting_order_stats,
     get_player_profile,
     precompute_all_profiles,
 )
@@ -129,7 +130,8 @@ with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.
         _step("📋 Computing match results...", 0.65)
         match_stats_all = get_match_stats(matches_df)
         team_stats_all  = get_team_stats(matches_df)
-        toss_stats_all  = get_toss_stats(matches_df)
+        toss_stats_all       = get_toss_stats(matches_df)
+        bat_order_stats_all  = get_batting_order_stats(matches_df, deliveries_df)
         pom_stats_all   = get_player_of_match_stats(matches_df)
 
         # 5 — Player profiles (heaviest — done once here)
@@ -146,6 +148,7 @@ with st.expander("📂 Upload Data (ZIP file containing all CSVs)", expanded=st.
             "match_stats":    match_stats_all,
             "team_stats":     team_stats_all,
             "toss_stats":     toss_stats_all,
+            "bat_order_stats": bat_order_stats_all,
             "pom_stats":      pom_stats_all,
             "all_profiles":   all_profiles,
         }
@@ -331,12 +334,19 @@ with tab1:
         valid_pairs = first_ball[first_ball["position"].isin(selected_positions)][["match_id", "innings", "striker"]]
         bat_del = bat_del.merge(valid_pairs, on=["match_id", "innings", "striker"], how="inner")
 
-    # Use precomputed full batting stats, then filter by team if needed
-    batting_base = _cache["batting_all"] if not (use_pos_filter and selected_positions) else get_batting_stats(bat_del, min_innings=1)
+    # Always start from precomputed cache — fast
+    batting_base = _cache["batting_all"].copy()
+
+    # Apply batting position filter (needs delivery-level data — slice cache by player list)
+    if use_pos_filter and selected_positions:
+        valid_players_pos = bat_del["striker"].dropna().unique()
+        batting_base = batting_base[batting_base["player"].isin(valid_players_pos)]
+
+    # Apply batting team filter
     if selected_batting_teams:
-        # filter to players who batted for selected team
         valid_players = bat_deliveries["striker"].dropna().unique()
         batting_base = batting_base[batting_base["player"].isin(valid_players)]
+
     batting = batting_base[batting_base["innings"] >= min_innings].copy()
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
     batting.index += 1
@@ -408,14 +418,19 @@ with tab2:
         )
         bowl_del = bowl_del[bowl_del["over_num"].isin(selected_overs)]
 
-    # Use precomputed full bowling stats, then filter by team/overs if needed
+    # Always start from precomputed cache — fast
+    bowling_base = _cache["bowling_all"].copy()
+
+    # Apply over filter — filter by valid bowlers in those overs
     if use_over_filter and selected_overs:
-        bowling_base = get_bowling_stats(bowl_del, min_overs=1)
-    else:
-        bowling_base = _cache["bowling_all"]
+        valid_bowlers_over = bowl_del["bowler"].dropna().unique()
+        bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers_over)]
+
+    # Apply bowling team filter
     if selected_bowling_teams:
         valid_bowlers = bowl_deliveries["bowler"].dropna().unique()
         bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers)]
+
     bowling = bowling_base[bowling_base["overs"] >= min_overs].copy()
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
     bowling.index += 1
@@ -438,7 +453,9 @@ with tab2:
 with tab3:
     st.markdown('<div class="section-header">📋 Match Results</div>', unsafe_allow_html=True)
 
-    match_stats = get_match_stats(final_matches)
+    # Slice cached match stats by current filter
+    match_stats = _cache["match_stats"]
+    match_stats = match_stats[match_stats["match_id"].isin(final_matches["match_id"])]
     st.dataframe(match_stats, use_container_width=True, height=500)
 
     st.markdown('<div class="section-header">🥇 Player of the Match</div>', unsafe_allow_html=True)
@@ -462,20 +479,66 @@ with tab3:
 with tab4:
     st.markdown('<div class="section-header">🏆 Team Performance</div>', unsafe_allow_html=True)
 
-    team_stats = get_team_stats(final_matches)
+    # Filter cached team stats to teams in current match filter
+    active_teams = set()
+    if "team1" in final_matches.columns: active_teams.update(final_matches["team1"].dropna().unique())
+    if "team2" in final_matches.columns: active_teams.update(final_matches["team2"].dropna().unique())
+    team_stats = _cache["team_stats"]
+    if active_teams:
+        team_stats = team_stats[team_stats["team"].isin(active_teams)]
     st.dataframe(team_stats, use_container_width=True, height=400)
+
+    st.markdown('<div class="section-header">🏏 Batting First vs Batting Second</div>', unsafe_allow_html=True)
+    bat_order = _cache["bat_order_stats"]
+    if active_teams:
+        bat_order = bat_order[bat_order["team"].isin(active_teams)]
+
+    st.caption("Win records when batting first vs chasing — filtered to current match selection")
+    st.dataframe(bat_order, use_container_width=True, height=400)
+
+    import plotly.express as px
+    if not bat_order.empty:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Win % Batting First vs Second**")
+            melt = bat_order[["team","win%_bat_first","win%_bat_second"]].melt(
+                id_vars="team", var_name="innings", value_name="win_%"
+            )
+            melt["innings"] = melt["innings"].map({
+                "win%_bat_first": "Bat First",
+                "win%_bat_second": "Bat Second"
+            })
+            fig = px.bar(melt, x="team", y="win_%", color="innings", barmode="group",
+                         color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
+                         text_auto=".1f")
+            fig.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
+                              paper_bgcolor="rgba(0,0,0,0)", font_color="white", showlegend=True)
+            st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            st.markdown("**Matches Batted First vs Second**")
+            melt2 = bat_order[["team","bat_first","bat_second"]].melt(
+                id_vars="team", var_name="innings", value_name="matches"
+            )
+            melt2["innings"] = melt2["innings"].map({
+                "bat_first": "Bat First",
+                "bat_second": "Bat Second"
+            })
+            fig2 = px.bar(melt2, x="team", y="matches", color="innings", barmode="group",
+                          color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
+                          text_auto=True)
+            fig2.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
+                               paper_bgcolor="rgba(0,0,0,0)", font_color="white", showlegend=True)
+            st.plotly_chart(fig2, use_container_width=True)
 
     st.markdown('<div class="section-header">🪙 Toss Analysis</div>', unsafe_allow_html=True)
     toss = _cache["toss_stats"]
-    col1, col2 = st.columns(2)
-    with col1:
-        st.dataframe(toss, use_container_width=True)
-    with col2:
-        plot_toss_impact(final_matches)
+    if active_teams:
+        toss = toss[toss["toss_winner"].isin(active_teams)]
+    st.dataframe(toss, use_container_width=True)
 
     st.download_button(
         "⬇️ Download Team Stats CSV",
-        team_stats.to_csv(index=False),
+        bat_order.to_csv(index=False),
         file_name="team_stats.csv",
         mime="text/csv",
     )
@@ -527,17 +590,19 @@ with tab6:
         col_search, col_role = st.columns([3, 1])
         with col_search:
             selected_player = st.selectbox(
-                "🔍 Search Player", options=[""] + all_players,
-                format_func=lambda x: "Type or select a player..." if x == "" else x,
+                "🔍 Search Player",
+                options=[None] + all_players,
+                format_func=lambda x: "— Type or select a player —" if x is None else x,
+                index=0,
             )
         with col_role:
             show_role = st.radio("Show Stats For", ["Both", "Batting Only", "Bowling Only"], horizontal=True)
 
-        if not selected_player:
+        if selected_player is None:
             st.info("👆 Select a player above to view their full profile.")
         else:
             # Instant lookup — no computation needed
-            profile = all_profiles[selected_player]
+            profile = all_profiles.get(selected_player, {})
 
             st.markdown(f"## 🏏 {selected_player}")
             st.markdown("---")
