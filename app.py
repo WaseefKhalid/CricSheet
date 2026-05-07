@@ -815,6 +815,15 @@ with tab6:
                     st.plotly_chart(fig_wl, use_container_width=True)
 
                     # Runs vs each team + venue
+                    # ── Top 10 Innings ────────────────────────────────────
+                    st.subheader("🏆 Top 10 Innings")
+                    top_inn = bat.get("top_innings", pd.DataFrame())
+                    if not top_inn.empty:
+                        top_inn.index += 1
+                        st.dataframe(top_inn, use_container_width=True, height=380)
+                    else:
+                        st.info("No innings data available.")
+
                     col_a, col_b = st.columns(2)
                     with col_a:
                         st.markdown("#### 🆚 Runs vs Each Team")
@@ -872,6 +881,15 @@ with tab6:
                                           paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                     fig_wlb.update_traces(textposition="outside")
                     st.plotly_chart(fig_wlb, use_container_width=True)
+
+                    # ── Top 10 Bowling Figures ────────────────────────────
+                    st.subheader("🏆 Top 10 Bowling Figures")
+                    top_fig = bowl.get("top_figures", pd.DataFrame())
+                    if not top_fig.empty:
+                        top_fig.index += 1
+                        st.dataframe(top_fig, use_container_width=True, height=380)
+                    else:
+                        st.info("No bowling figures data available.")
 
                     col_a, col_b = st.columns(2)
                     with col_a:
