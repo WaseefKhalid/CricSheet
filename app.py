@@ -1477,23 +1477,26 @@ with tab5:
     st.divider()
     st.subheader("📅 Season-by-Season Trends")
     if "season" in final_matches.columns:
-        season_del = del_df.merge(
-            final_matches[["match_id","season"]], on="match_id", how="left"
-        )
+        _sm = final_matches.set_index("match_id")["season"].to_dict()
+        del_df["_s"] = del_df["match_id"].map(_sm)
+        sd2 = del_df[del_df["_s"].notna()].copy()
         season_agg = (
-            season_del.groupby("season")
-            .agg(
-                runs    =("total_runs","sum"),
-                wickets =("is_wicket","sum"),
-                matches =("match_id","nunique"),
-                balls   =("is_legal","sum"),
-            )
-            .reset_index()
-            .sort_values("season")
+            sd2.groupby("_s")
+            .agg(runs=("total_runs","sum"), wickets=("is_wicket","sum"),
+                 matches=("match_id","nunique"), balls=("is_legal","sum"))
+            .reset_index().rename(columns={"_s":"season"}).sort_values("season")
         )
-        season_agg["avg_score"]   = (season_agg["runs"] / season_agg["matches"] / 2).round(1)
-        season_agg["run_rate"]    = (season_agg["runs"] / season_agg["balls"] * 6).round(2)
-        season_agg["avg_wkts"]    = (season_agg["wickets"] / season_agg["matches"] / 2).round(2)
+        _sinn = (
+            sd2.groupby(["_s","match_id","innings"])
+            .size().reset_index(name="_b")
+            .groupby("_s").size().reset_index(name="inn_count")
+            .rename(columns={"_s":"season"})
+        )
+        season_agg = season_agg.merge(_sinn, on="season", how="left")
+        season_agg["inn_count"] = season_agg["inn_count"].fillna(season_agg["matches"]*2)
+        season_agg["avg_score"] = (season_agg["runs"] / season_agg["inn_count"]).round(1)
+        season_agg["run_rate"]  = (season_agg["runs"] / season_agg["balls"] * 6).round(2)
+        season_agg["avg_wkts"]  = (season_agg["wickets"] / season_agg["inn_count"]).round(2)
 
         col1, col2, col3 = st.columns(3)
         with col1:
