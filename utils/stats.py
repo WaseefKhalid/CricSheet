@@ -581,13 +581,15 @@ def _get_partnerships(p_agg: pd.DataFrame, player: str) -> pd.DataFrame:
         .agg(
             partnerships=("partnerships","sum"),
             total_runs   =("total_runs","sum"),
+            total_balls  =("total_balls","sum"),
             best         =("best","max"),
         )
         .reset_index()
     )
     result["avg"] = (result["total_runs"] / result["partnerships"]).round(1)
+    result["sr"]  = (result["total_runs"] / result["total_balls"] * 100).round(1).where(result["total_balls"] > 0, 0)
     return (
-        result[["partner","partnerships","total_runs","avg","best"]]
+        result[["partner","partnerships","total_runs","avg","sr","best"]]
         .sort_values("avg", ascending=False)
         .reset_index(drop=True)
     )
@@ -678,17 +680,37 @@ def precompute_all_profiles(
         .rename(columns={"runs_off_bat":"stand_runs"})
     )
 
+    # Also count legal balls per partnership per stand
+    p_legal = bat[bat["wides"] == 0][["match_id","innings","striker","non_striker"]].copy()
+    p_legal["pb1"] = np.where(p_legal["striker"] < p_legal["non_striker"],
+                              p_legal["striker"], p_legal["non_striker"])
+    p_legal["pb2"] = np.where(p_legal["striker"] < p_legal["non_striker"],
+                              p_legal["non_striker"], p_legal["striker"])
+    p_balls = (
+        p_legal.groupby(["pb1","pb2","match_id","innings"])
+        .size()
+        .reset_index(name="stand_balls")
+    )
+
+    p_runs_balls = p_runs.merge(
+        p_balls.rename(columns={"pb1":"p1","pb2":"p2"}),
+        on=["p1","p2","match_id","innings"], how="left"
+    )
+    p_runs_balls["stand_balls"] = p_runs_balls["stand_balls"].fillna(0)
+
     # Aggregate across all stands
     p_agg = (
-        p_runs.groupby(["p1","p2"])
+        p_runs_balls.groupby(["p1","p2"])
         .agg(
             partnerships=("stand_runs","count"),
             total_runs   =("stand_runs","sum"),
+            total_balls  =("stand_balls","sum"),
             best         =("stand_runs","max"),
         )
         .reset_index()
     )
     p_agg["avg"] = (p_agg["total_runs"] / p_agg["partnerships"]).round(1)
+    p_agg["sr"]  = (p_agg["total_runs"] / p_agg["total_balls"] * 100).round(1).where(p_agg["total_balls"] > 0, 0)
 
     # runs per ball-level groupby
     bat_legal = bat[bat["wides"] == 0]
