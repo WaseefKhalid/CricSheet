@@ -273,6 +273,22 @@ selected_seasons = st.sidebar.multiselect(
 filtered_matches_temp = apply_filters(matches_df, {"season": selected_seasons})
 opts_after_season = get_filter_options(filtered_matches_temp)
 
+# Event filter — key for T20 data with multiple tournaments
+_event_opts = opts_after_season.get("events", [])
+if len(_event_opts) > 1:
+    st.sidebar.markdown("#### 🏆 Event / Tournament")
+    selected_events = st.sidebar.multiselect(
+        "🏆 Event",
+        options=_event_opts,
+        default=[],
+        help="Filter by specific tournament/event e.g. T20 World Cup, PSL, etc."
+    )
+    if selected_events:
+        filtered_matches_temp = apply_filters(filtered_matches_temp, {"event": selected_events})
+        opts_after_season = get_filter_options(filtered_matches_temp)
+else:
+    selected_events = []
+
 # ── MAIN TEAM FILTER — filters everything at once ─────────────────────────
 st.sidebar.markdown("#### 🏆 Team")
 selected_main_team = st.sidebar.multiselect(
