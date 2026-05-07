@@ -16,10 +16,6 @@ from utils.stats import (
     precompute_all_profiles,
 )
 from components.charts import (
-    plot_runs_per_season,
-    plot_wickets_per_season,
-    plot_win_by_method,
-    plot_toss_impact,
     plot_top_batsmen,
     plot_top_bowlers,
 )
@@ -396,12 +392,11 @@ k5.metric("🏟️ Venues", f"{final_matches['venue'].nunique()}")
 st.markdown("---")
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab6 = st.tabs([
     "🏏 Batting Stats",
     "🎳 Bowling Stats",
     "🏅 MOM Analysis",
     "🏆 Team Stats",
-    "📈 Charts",
     "👤 Player Profile",
 ])
 
@@ -1176,32 +1171,6 @@ with tab4:
         file_name="team_stats.csv",
         mime="text/csv",
     )
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TAB 5 — CHARTS
-# ─────────────────────────────────────────────────────────────────────────────
-with tab5:
-    st.subheader("📈 Visual Analytics")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        plot_runs_per_season(final_deliveries, final_matches)
-    with col2:
-        plot_wickets_per_season(final_deliveries, final_matches)
-
-    st.subheader("🏏 Top 10 Run Scorers")
-    bat_chart = _cache["batting_all"].copy()
-    if valid_bat_players is not None:
-        bat_chart = bat_chart[bat_chart["player"].isin(valid_bat_players)]
-    bat_chart = bat_chart.sort_values("runs", ascending=False).head(10)
-    plot_top_batsmen(bat_chart, x="player", y="runs", title="Top 10 Run Scorers")
-
-    st.subheader("🎳 Top 10 Wicket Takers")
-    bowl_chart = _cache["bowling_all"].copy()
-    if valid_bowl_players is not None:
-        bowl_chart = bowl_chart[bowl_chart["player"].isin(valid_bowl_players)]
-    bowl_chart = bowl_chart.sort_values("wickets", ascending=False).head(10)
-    plot_top_bowlers(bowl_chart)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 6 — PLAYER PROFILE
