@@ -44,6 +44,10 @@ def apply_filters(matches_df: pd.DataFrame, filters: Dict[str, List]) -> pd.Data
     if team:
         df = df[df["team1"].isin(team) | df["team2"].isin(team)]
 
+    event = filters.get("event", [])
+    if event:
+        df = df[df["event"].isin(event)]
+
     toss_winner = filters.get("toss_winner", [])
     if toss_winner:
         df = df[df["toss_winner"].isin(toss_winner)]
