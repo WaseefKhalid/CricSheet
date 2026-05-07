@@ -503,7 +503,7 @@ with tab1:
     with col_th:
         st.markdown(f"**Batters** — {len(batting)} players")
     with col_dl:
-        st.download_button("⬇️ CSV", batting.to_csv(index=False, key="dl_1"), file_name="batting_stats.csv", mime="text/csv")
+        st.download_button("⬇️ CSV", batting.to_csv(index=False), key="dl_1", file_name="batting_stats.csv", mime="text/csv")
     st.dataframe(batting, use_container_width=True, height=500)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -585,7 +585,7 @@ with tab2:
     with col_th:
         st.markdown(f"**Bowlers** — {len(bowling)} players")
     with col_dl:
-        st.download_button("⬇️ CSV", bowling.to_csv(index=False, key="dl_2"), file_name="bowling_stats.csv", mime="text/csv")
+        st.download_button("⬇️ CSV", bowling.to_csv(index=False), key="dl_2", file_name="bowling_stats.csv", mime="text/csv")
     st.dataframe(bowling, use_container_width=True, height=500)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -922,8 +922,9 @@ with tab3:
 
     st.download_button(
         "⬇️ Download MOM Data CSV",
-        pom_counts.to_csv(index=False, key="dl_3"),
+        pom_counts.to_csv(index=False),
         file_name="player_of_match.csv",
+        key="dl_3",
         mime="text/csv",
     )
 
@@ -1016,7 +1017,7 @@ with tab4:
                 st.plotly_chart(fig, use_container_width=True, key="fig_5")
 
             st.download_button("⬇️ Download Batting CSV",
-                tm_bat_stats.to_csv(index=False, key="dl_4"), file_name=f"{dashboard_team}_batting.csv")
+                tm_bat_stats.to_csv(index=False), file_name=f"{dashboard_team}_batting.csv")
 
         # ── TOP BOWLERS ───────────────────────────────────────────────────────
         with t2:
@@ -1040,7 +1041,7 @@ with tab4:
                 st.plotly_chart(fig2, use_container_width=True, key="fig_6")
 
             st.download_button("⬇️ Download Bowling CSV",
-                tm_bowl_stats.to_csv(index=False, key="dl_5"), file_name=f"{dashboard_team}_bowling.csv")
+                tm_bowl_stats.to_csv(index=False), file_name=f"{dashboard_team}_bowling.csv")
 
         # ── VENUE STATS ───────────────────────────────────────────────────────
         with t3:
@@ -1117,7 +1118,7 @@ with tab4:
                 st.plotly_chart(fig4, use_container_width=True, key="fig_8")
 
             st.download_button("⬇️ Download vs Teams CSV",
-                vs_stats.to_csv(index=False, key="dl_6"), file_name=f"{dashboard_team}_vs_teams.csv")
+                vs_stats.to_csv(index=False), file_name=f"{dashboard_team}_vs_teams.csv")
 
         # ── TOSS & BAT ORDER ─────────────────────────────────────────────────
         with t5:
@@ -1198,8 +1199,9 @@ with tab4:
 
     st.download_button(
         "⬇️ Download Team Stats CSV",
-        team_stats.to_csv(index=False, key="dl_7"),
+        team_stats.to_csv(index=False),
         file_name="team_stats.csv",
+        key="dl_7",
         mime="text/csv",
     )
 
@@ -1520,8 +1522,9 @@ with tab5:
 
     st.download_button(
         "⬇️ Download Phase Analysis CSV",
-        phase_agg.to_csv(index=False, key="dl_8"),
+        phase_agg.to_csv(index=False),
         file_name="league_phase_analysis.csv",
+        key="dl_8",
         mime="text/csv",
     )
 
@@ -1744,7 +1747,7 @@ with tab5:
                                   font_color="white", xaxis_tickangle=-45)
                 st.plotly_chart(fig, use_container_width=True, key="fig_33")
 
-    st.download_button("⬇️ Download Phase CSV", phase_agg.to_csv(index=False, key="dl_9"),
+    st.download_button("⬇️ Download Phase CSV", phase_agg.to_csv(index=False), key="dl_9",
                        file_name="league_analysis.csv", mime="text/csv")
 
 # TAB 6 — PLAYER PROFILE
