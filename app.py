@@ -2,6 +2,14 @@ import streamlit as st
 import pandas as pd
 import time
 import os
+
+# Global chart key counter — ensures every plotly chart has a unique key
+if "_chart_counter" not in st.session_state:
+    st.session_state._chart_counter = 0
+
+def _next_key():
+    st.session_state._chart_counter += 1
+    return f"chart_{st.session_state._chart_counter}"
 from utils.data_loader import load_data_from_zip
 from utils.filters import apply_filters, get_filter_options
 from utils.stats import (
@@ -644,7 +652,7 @@ with tab3:
                              plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                              font_color="white", coloraxis_showscale=False)
         fig_lb.update_traces(textposition="outside")
-        st.plotly_chart(fig_lb, use_container_width=True, key="fig_l646")
+        st.plotly_chart(fig_lb, use_container_width=True, key=_next_key())
 
     # ── 2. Player drill-down ──────────────────────────────────────────────────
     st.subheader("🔍 Player Deep Dive")
@@ -712,7 +720,7 @@ with tab3:
                                       plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                       font_color="white", coloraxis_showscale=False)
                 fig_opp.update_traces(textposition="outside")
-                st.plotly_chart(fig_opp, use_container_width=True, key="fig_l714")
+                st.plotly_chart(fig_opp, use_container_width=True, key=_next_key())
 
         # at each venue
         with col_b:
@@ -729,7 +737,7 @@ with tab3:
                                       plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                       font_color="white", coloraxis_showscale=False)
                 fig_ven.update_traces(textposition="outside")
-                st.plotly_chart(fig_ven, use_container_width=True, key="fig_l731")
+                st.plotly_chart(fig_ven, use_container_width=True, key=_next_key())
 
         # per season
         with col_c:
@@ -747,7 +755,7 @@ with tab3:
                                       plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                       font_color="white", coloraxis_showscale=False)
                 fig_sea.update_traces(textposition="outside")
-                st.plotly_chart(fig_sea, use_container_width=True, key="fig_l749")
+                st.plotly_chart(fig_sea, use_container_width=True, key=_next_key())
 
         # ── Full match log ────────────────────────────────────────────────────
         st.subheader(f"📋 All {selected_pom_player} MOM Matches")
@@ -1014,7 +1022,7 @@ with tab4:
                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   font_color="white", coloraxis_showscale=False)
                 fig.update_traces(textposition="outside")
-                st.plotly_chart(fig, use_container_width=True, key="fig_l1016")
+                st.plotly_chart(fig, use_container_width=True, key=_next_key())
 
             st.download_button("⬇️ Download Batting CSV",
                 tm_bat_stats.to_csv(index=False), file_name=f"{dashboard_team}_batting.csv")
@@ -1038,7 +1046,7 @@ with tab4:
                                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                    font_color="white", coloraxis_showscale=False)
                 fig2.update_traces(textposition="outside")
-                st.plotly_chart(fig2, use_container_width=True, key="fig_l1040")
+                st.plotly_chart(fig2, use_container_width=True, key=_next_key())
 
             st.download_button("⬇️ Download Bowling CSV",
                 tm_bowl_stats.to_csv(index=False), file_name=f"{dashboard_team}_bowling.csv")
@@ -1069,7 +1077,7 @@ with tab4:
                                   title="Won vs Lost at each Venue")
                     fig3.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
                                        paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    st.plotly_chart(fig3, use_container_width=True, key="fig_l1071")
+                    st.plotly_chart(fig3, use_container_width=True, key=_next_key())
 
                 # Runs at each venue
                 if "venue" in tm_bat_del.columns:
@@ -1115,7 +1123,7 @@ with tab4:
                                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                    font_color="white", coloraxis_showscale=False)
                 fig4.update_traces(textposition="outside")
-                st.plotly_chart(fig4, use_container_width=True, key="fig_l1117")
+                st.plotly_chart(fig4, use_container_width=True, key=_next_key())
 
             st.download_button("⬇️ Download vs Teams CSV",
                 vs_stats.to_csv(index=False), file_name=f"{dashboard_team}_vs_teams.csv")
@@ -1136,7 +1144,7 @@ with tab4:
                         color_discrete_sequence=["#1DB954","#00b4d8"]
                     )
                     fig5.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    st.plotly_chart(fig5, use_container_width=True, key="fig_l1138")
+                    st.plotly_chart(fig5, use_container_width=True, key=_next_key())
 
             with col2:
                 st.subheader("🏏 Bat First vs Second")
@@ -1157,7 +1165,7 @@ with tab4:
                     fig6.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                                        paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                     fig6.update_traces(textposition="outside")
-                    st.plotly_chart(fig6, use_container_width=True, key="fig_l1159")
+                    st.plotly_chart(fig6, use_container_width=True, key=_next_key())
 
     else:
         # ── OVERVIEW CHARTS (no team selected) ───────────────────────────────
@@ -1179,7 +1187,7 @@ with tab4:
                              color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"}, text_auto=".1f")
                 fig.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                st.plotly_chart(fig, use_container_width=True, key="fig_l1181")
+                st.plotly_chart(fig, use_container_width=True, key=_next_key())
             with col2:
                 melt2 = bat_order[["team","bat_first","bat_second"]].melt(
                     id_vars="team", var_name="innings", value_name="matches"
@@ -1189,7 +1197,7 @@ with tab4:
                               color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"}, text_auto=True)
                 fig2.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
                                    paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                st.plotly_chart(fig2, use_container_width=True, key="fig_l1191")
+                st.plotly_chart(fig2, use_container_width=True, key=_next_key())
 
         st.subheader("🪙 Toss Analysis")
         toss = _cache["toss_stats"]
@@ -1276,7 +1284,7 @@ with tab5:
         )
         fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)",
                                paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_dist, use_container_width=True, key="fig_l1278")
+        st.plotly_chart(fig_dist, use_container_width=True, key=_next_key())
     with col2:
         st.markdown("**📊 Win % by 1st Innings Score Range**")
         inn1c = inn1.copy()
@@ -1298,7 +1306,7 @@ with tab5:
                                paper_bgcolor="rgba(0,0,0,0)", font_color="white",
                                coloraxis_showscale=False)
         fig_band.update_traces(textposition="outside")
-        st.plotly_chart(fig_band, use_container_width=True, key="fig_l1300")
+        st.plotly_chart(fig_band, use_container_width=True, key=_next_key())
 
     # ── Phase analysis ────────────────────────────────────────────────────────
     st.divider()
@@ -1340,7 +1348,7 @@ with tab5:
         fig_pr.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_pr.update_traces(textposition="outside")
-        st.plotly_chart(fig_pr, use_container_width=True, key="fig_l1342")
+        st.plotly_chart(fig_pr, use_container_width=True, key=_next_key())
     with col2:
         st.markdown("**🎳 Avg Wickets per Innings by Phase**")
         fig_pw = px.bar(phase_agg, x="phase", y="avg_wkts_per_inn",
@@ -1350,7 +1358,7 @@ with tab5:
         fig_pw.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_pw.update_traces(textposition="outside")
-        st.plotly_chart(fig_pw, use_container_width=True, key="fig_l1352")
+        st.plotly_chart(fig_pw, use_container_width=True, key=_next_key())
 
     col3, col4 = st.columns(2)
     with col3:
@@ -1362,7 +1370,7 @@ with tab5:
         fig_rr.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_rr.update_traces(textposition="outside")
-        st.plotly_chart(fig_rr, use_container_width=True, key="fig_l1364")
+        st.plotly_chart(fig_rr, use_container_width=True, key=_next_key())
     with col4:
         st.markdown("**⚡ Balls per Wicket by Phase**")
         fig_wb = px.bar(phase_agg, x="phase", y="balls_per_wicket",
@@ -1372,7 +1380,7 @@ with tab5:
         fig_wb.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_wb.update_traces(textposition="outside")
-        st.plotly_chart(fig_wb, use_container_width=True, key="fig_l1374")
+        st.plotly_chart(fig_wb, use_container_width=True, key=_next_key())
 
     st.caption("All values are **per innings** — PP avg ~54 runs is correct for T20")
     # Phase table
@@ -1415,7 +1423,7 @@ with tab5:
         fig_or.add_vline(x=6.5,  line_dash="dash", line_color="#8b949e", annotation_text="PP end")
         fig_or.add_vline(x=15.5, line_dash="dash", line_color="#8b949e", annotation_text="Middle end")
         fig_or.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_or, use_container_width=True, key="fig_l1417")
+        st.plotly_chart(fig_or, use_container_width=True, key=_next_key())
     with col2:
         fig_ow = px.bar(over_agg, x="over_num", y="avg_wkts",
                         color="avg_wkts",
@@ -1426,7 +1434,7 @@ with tab5:
         fig_ow.add_vline(x=15.5, line_dash="dash", line_color="#8b949e")
         fig_ow.update_layout(showlegend=False, coloraxis_showscale=False,
                              plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_ow, use_container_width=True, key="fig_l1428")
+        st.plotly_chart(fig_ow, use_container_width=True, key=_next_key())
 
     # ── Toss & Venue ──────────────────────────────────────────────────────────
     st.divider()
@@ -1450,7 +1458,7 @@ with tab5:
             fig_td.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
             fig_td.update_traces(textposition="outside")
-            st.plotly_chart(fig_td, use_container_width=True, key="fig_l1452")
+            st.plotly_chart(fig_td, use_container_width=True, key=_next_key())
 
     with col2:
         st.markdown("**Avg 1st Innings Score by Venue**")
@@ -1473,7 +1481,7 @@ with tab5:
                                   coloraxis_showscale=False,
                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
             fig_va.update_traces(textposition="outside")
-            st.plotly_chart(fig_va, use_container_width=True, key="fig_l1475")
+            st.plotly_chart(fig_va, use_container_width=True, key=_next_key())
 
     # ── Season trends ─────────────────────────────────────────────────────────
     st.divider()
@@ -1506,19 +1514,19 @@ with tab5:
                              color_discrete_sequence=["#1DB954"],
                              title="Avg Innings Score per Season")
             fig_sa.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white", xaxis_tickangle=-45)
-            st.plotly_chart(fig_sa, use_container_width=True, key="fig_l1508")
+            st.plotly_chart(fig_sa, use_container_width=True, key=_next_key())
         with col2:
             fig_rrs = px.line(season_agg, x="season", y="run_rate", markers=True,
                               color_discrete_sequence=["#00b4d8"],
                               title="Run Rate per Season")
             fig_rrs.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white", xaxis_tickangle=-45)
-            st.plotly_chart(fig_rrs, use_container_width=True, key="fig_l1514")
+            st.plotly_chart(fig_rrs, use_container_width=True, key=_next_key())
         with col3:
             fig_ws = px.line(season_agg, x="season", y="avg_wkts", markers=True,
                              color_discrete_sequence=["#e63946"],
                              title="Avg Wickets per Innings per Season")
             fig_ws.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white", xaxis_tickangle=-45)
-            st.plotly_chart(fig_ws, use_container_width=True, key="fig_l1520")
+            st.plotly_chart(fig_ws, use_container_width=True, key=_next_key())
 
     st.download_button(
         "⬇️ Download Phase Analysis CSV",
@@ -1577,7 +1585,7 @@ with tab5:
         st.markdown("**📈 1st Innings Score Distribution**")
         fig_dist = px.histogram(inn1, x="runs", nbins=30, color_discrete_sequence=["#1DB954"])
         fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_dist, use_container_width=True, key="fig_l1579")
+        st.plotly_chart(fig_dist, use_container_width=True, key=_next_key())
     with col2:
         st.markdown("**📊 Win % by 1st Innings Score Range**")
         inn1c = inn1.copy()
@@ -1591,7 +1599,7 @@ with tab5:
         fig_band.update_layout(showlegend=False, coloraxis_showscale=False,
                                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_band.update_traces(textposition="outside")
-        st.plotly_chart(fig_band, use_container_width=True, key="fig_l1593")
+        st.plotly_chart(fig_band, use_container_width=True, key=_next_key())
 
     # Phase analysis
     st.divider()
@@ -1637,7 +1645,7 @@ with tab5:
             fig.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
             fig.update_traces(textposition="outside")
-            st.plotly_chart(fig, use_container_width=True, key="fig_l1639")
+            st.plotly_chart(fig, use_container_width=True, key=_next_key())
 
     st.caption("All averages are **per innings** (not per match)")
     st.dataframe(
@@ -1671,7 +1679,7 @@ with tab5:
         fig_or.add_vline(x=6.5,  line_dash="dash", line_color="#8b949e", annotation_text="PP end")
         fig_or.add_vline(x=15.5, line_dash="dash", line_color="#8b949e", annotation_text="Death start")
         fig_or.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_or, use_container_width=True, key="fig_l1673")
+        st.plotly_chart(fig_or, use_container_width=True, key=_next_key())
     with col2:
         fig_ow = px.bar(ov_agg, x="over_num", y="avg_wkts", color="avg_wkts",
                         color_continuous_scale=["#1a3550","#e63946"], title="Avg Wickets per Over")
@@ -1679,7 +1687,7 @@ with tab5:
         fig_ow.add_vline(x=15.5, line_dash="dash", line_color="#8b949e")
         fig_ow.update_layout(showlegend=False, coloraxis_showscale=False,
                              plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_ow, use_container_width=True, key="fig_l1681")
+        st.plotly_chart(fig_ow, use_container_width=True, key=_next_key())
 
     # Toss + Venue
     st.divider()
@@ -1697,7 +1705,7 @@ with tab5:
             fig_td.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
             fig_td.update_traces(textposition="outside")
-            st.plotly_chart(fig_td, use_container_width=True, key="fig_l1699")
+            st.plotly_chart(fig_td, use_container_width=True, key=_next_key())
     with col2:
         inn1v = inn1.merge(final_matches[["match_id","venue"]].drop_duplicates(), on="match_id", how="left")
         va = inn1v.groupby("venue")["runs"].agg(avg="mean",count="count").reset_index()
@@ -1709,7 +1717,7 @@ with tab5:
         fig_va.update_layout(showlegend=False, xaxis_tickangle=-35, coloraxis_showscale=False,
                               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_va.update_traces(textposition="outside")
-        st.plotly_chart(fig_va, use_container_width=True, key="fig_l1711")
+        st.plotly_chart(fig_va, use_container_width=True, key=_next_key())
 
     # Season trends
     st.divider()
@@ -1745,7 +1753,7 @@ with tab5:
                               color_discrete_sequence=[color], title=title)
                 fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   font_color="white", xaxis_tickangle=-45)
-                st.plotly_chart(fig, use_container_width=True, key="fig_l1747")
+                st.plotly_chart(fig, use_container_width=True, key=_next_key())
 
     st.download_button("⬇️ Download Phase CSV", phase_agg.to_csv(index=False), key="dl_9",
                        file_name="league_analysis.csv", mime="text/csv")
@@ -1855,7 +1863,7 @@ with tab6:
                                     xaxis=dict(tickmode="linear", dtick=1),
                                 )
                                 fig_pos.update_traces(textposition="outside")
-                                st.plotly_chart(fig_pos, use_container_width=True, key="fig_l1857")
+                                st.plotly_chart(fig_pos, use_container_width=True, key=_next_key())
 
                                 # SR by position
                                 fig_sr = px.bar(
@@ -1873,7 +1881,7 @@ with tab6:
                                     xaxis=dict(tickmode="linear", dtick=1),
                                 )
                                 fig_sr.update_traces(textposition="outside")
-                                st.plotly_chart(fig_sr, use_container_width=True, key="fig_l1875")
+                                st.plotly_chart(fig_sr, use_container_width=True, key=_next_key())
                         else:
                             st.info("No position data available.")
 
@@ -1890,7 +1898,7 @@ with tab6:
                     fig_wl.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                                          paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                     fig_wl.update_traces(textposition="outside")
-                    st.plotly_chart(fig_wl, use_container_width=True, key="fig_l1892")
+                    st.plotly_chart(fig_wl, use_container_width=True, key=_next_key())
 
                     # Runs vs each team + venue
                     # ── Top 10 Innings ────────────────────────────────────
@@ -1956,7 +1964,7 @@ with tab6:
                                 coloraxis_showscale=False,
                             )
                             fig_p.update_traces(textposition="outside")
-                            st.plotly_chart(fig_p, use_container_width=True, key="fig_l1958")
+                            st.plotly_chart(fig_p, use_container_width=True, key=_next_key())
                     else:
                         st.info("No partnership data available.")
 
@@ -1971,7 +1979,7 @@ with tab6:
                                                  plot_bgcolor="rgba(0,0,0,0)",
                                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                             fig_vt.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vt, use_container_width=True, key="fig_l1973")
+                            st.plotly_chart(fig_vt, use_container_width=True, key=_next_key())
                         else:
                             st.info("No data.")
 
@@ -1985,7 +1993,7 @@ with tab6:
                                                  plot_bgcolor="rgba(0,0,0,0)",
                                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                             fig_vv.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vv, use_container_width=True, key="fig_l1987")
+                            st.plotly_chart(fig_vv, use_container_width=True, key=_next_key())
                         else:
                             st.info("No data.")
                 else:
@@ -2016,7 +2024,7 @@ with tab6:
                     fig_wlb.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                                           paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                     fig_wlb.update_traces(textposition="outside")
-                    st.plotly_chart(fig_wlb, use_container_width=True, key="fig_l2018")
+                    st.plotly_chart(fig_wlb, use_container_width=True, key=_next_key())
 
                     # ── Top 10 Bowling Figures ────────────────────────────
                     st.subheader("🏆 Top 10 Bowling Figures")
@@ -2038,7 +2046,7 @@ with tab6:
                                                   plot_bgcolor="rgba(0,0,0,0)",
                                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                             fig_vtb.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vtb, use_container_width=True, key="fig_l2040")
+                            st.plotly_chart(fig_vtb, use_container_width=True, key=_next_key())
                         else:
                             st.info("No data.")
 
@@ -2052,7 +2060,7 @@ with tab6:
                                                   plot_bgcolor="rgba(0,0,0,0)",
                                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                             fig_vvb.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vvb, use_container_width=True, key="fig_l2054")
+                            st.plotly_chart(fig_vvb, use_container_width=True, key=_next_key())
                         else:
                             st.info("No data.")
                 else:
@@ -2076,7 +2084,7 @@ with tab6:
                                              plot_bgcolor="rgba(0,0,0,0)",
                                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                         fig_mt.update_traces(textposition="outside")
-                        st.plotly_chart(fig_mt, use_container_width=True, key="fig_l2078")
+                        st.plotly_chart(fig_mt, use_container_width=True, key=_next_key())
 
                 with col_b:
                     st.markdown("#### 📍 MOM Awards at Each Venue")
@@ -2089,7 +2097,7 @@ with tab6:
                                              plot_bgcolor="rgba(0,0,0,0)",
                                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
                         fig_mv.update_traces(textposition="outside")
-                        st.plotly_chart(fig_mv, use_container_width=True, key="fig_l2091")
+                        st.plotly_chart(fig_mv, use_container_width=True, key=_next_key())
 
                 st.markdown("#### 📋 All MOM Matches")
                 mom_matches_df = mom.get("matches", pd.DataFrame())
