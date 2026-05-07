@@ -399,7 +399,7 @@ st.markdown("---")
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏏 Batting Stats",
     "🎳 Bowling Stats",
-    "📋 Match Results",
+    "🏅 MOM Analysis",
     "🏆 Team Stats",
     "📈 Charts",
     "👤 Player Profile",
@@ -565,73 +565,209 @@ with tab2:
     st.dataframe(bowling, use_container_width=True, height=500)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 3 — MATCH RESULTS
+# TAB 3 — PLAYER OF MATCH ANALYSIS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.subheader("📋 Match Results")
+    import plotly.express as px
 
-    # Slice cached match stats by current filter
-    match_stats = _cache["match_stats"]
-    match_stats = match_stats[match_stats["match_id"].isin(final_matches["match_id"])]
-    st.dataframe(match_stats, use_container_width=True, height=500)
+    st.subheader("🏅 Player of the Match Analysis")
 
-    st.subheader("🥇 Player of the Match")
-
-    # Build POM from filtered matches (not full cache — respects current filters)
     filtered_match_ids = set(final_matches["match_id"].tolist())
-
-    # Full match detail with team info for For/Against logic
     match_detail = _cache["match_stats"].copy()
     match_detail = match_detail[match_detail["match_id"].isin(filtered_match_ids)]
-    match_detail = match_detail[match_detail["player_of_match"].notna() &
-                                (match_detail["player_of_match"] != "")]
+    match_detail = match_detail[
+        match_detail["player_of_match"].notna() &
+        (match_detail["player_of_match"].astype(str).str.strip() != "")
+    ]
 
-    # For/Against toggle — only show when team is selected
+    # For/Against toggle when team selected
     if selected_main_team:
         pom_mode = st.radio(
-            "Show Player of Match:",
-            ["🏆 For (selected team players)", "⚔️ Against (opposition players)", "📋 All"],
-            horizontal=True,
-            key="pom_mode"
+            "Show awards:",
+            ["🏆 For (team players)", "⚔️ Against (opposition)", "📋 All"],
+            horizontal=True, key="pom_mode"
         )
-
-        # Get players who play FOR the selected team
         team_players = valid_team_players or set()
-
         if "For" in pom_mode:
-            # POM winners who are FROM the selected team
             match_detail = match_detail[match_detail["player_of_match"].isin(team_players)]
-            pom_title = f"Top MOM Winners — {', '.join(selected_main_team)} Players"
         elif "Against" in pom_mode:
-            # POM winners who are opposition (NOT from selected team)
             match_detail = match_detail[~match_detail["player_of_match"].isin(team_players)]
-            pom_title = f"Top MOM Winners — Against {', '.join(selected_main_team)}"
-        else:
-            pom_title = "All Player of Match Winners"
-    else:
-        pom_title = "Top Player of Match Winners"
 
-    # Compute POM counts from filtered data
-    if not match_detail.empty:
-        pom = (
-            match_detail["player_of_match"]
-            .value_counts()
-            .reset_index()
-        )
-        pom.columns = ["player_of_match", "awards"]
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.dataframe(pom, use_container_width=True, height=400)
-        with col2:
-            plot_top_batsmen(pom.head(10), x="player_of_match", y="awards", title=pom_title)
-    else:
+    if match_detail.empty:
         st.info("No Player of the Match data for current selection.")
+        st.stop()
+
+    # ── 1. Overall leaderboard ────────────────────────────────────────────────
+    st.subheader("🥇 Overall Leaderboard")
+    pom_counts = (
+        match_detail["player_of_match"]
+        .value_counts()
+        .reset_index()
+    )
+    pom_counts.columns = ["player", "awards"]
+    pom_counts.index   = range(1, len(pom_counts) + 1)
+
+    col1, col2 = st.columns([2, 3])
+    with col1:
+        st.dataframe(pom_counts, use_container_width=True, height=400)
+    with col2:
+        fig_lb = px.bar(
+            pom_counts.head(15), x="player", y="awards",
+            color="awards", color_continuous_scale=["#1a3550","#1DB954"],
+            text="awards", title="Top 15 Player of Match Winners"
+        )
+        fig_lb.update_layout(showlegend=False, xaxis_tickangle=-35,
+                             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                             font_color="white", coloraxis_showscale=False)
+        fig_lb.update_traces(textposition="outside")
+        st.plotly_chart(fig_lb, use_container_width=True)
+
+    # ── 2. Player drill-down ──────────────────────────────────────────────────
+    st.subheader("🔍 Player Deep Dive")
+    player_list = pom_counts["player"].tolist()
+    selected_pom_player = st.selectbox(
+        "Select a player to see all their MOM details",
+        options=[None] + player_list,
+        format_func=lambda x: "— Select player —" if x is None else x,
+        key="pom_player_select"
+    )
+
+    if selected_pom_player:
+        player_awards = match_detail[match_detail["player_of_match"] == selected_pom_player].copy()
+
+        # Determine opponent for each match
+        def get_opponent(row, player_team_map):
+            t = player_team_map.get(row["match_id"])
+            if t is None: return "Unknown"
+            return row["team2"] if row["team1"] == t else row["team1"]
+
+        # Get player's team per match from deliveries
+        player_bat_team = (
+            final_deliveries[final_deliveries["striker"] == selected_pom_player]
+            [["match_id","batting_team"]]
+            .drop_duplicates("match_id")
+        )
+        pt_map = dict(zip(player_bat_team["match_id"], player_bat_team["batting_team"]))
+        player_awards["player_team"] = player_awards["match_id"].map(pt_map)
+        player_awards["opponent"] = player_awards.apply(
+            lambda r: r["team2"] if r["team1"] == r.get("player_team") else r["team1"], axis=1
+        )
+
+        total = len(player_awards)
+        st.markdown(f"**{selected_pom_player}** has won **{total}** Player of the Match award{'s' if total != 1 else ''}")
+
+        # KPI row
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Total Awards", total)
+        if "opponent" in player_awards.columns:
+            best_opp = player_awards["opponent"].value_counts().idxmax() if not player_awards["opponent"].empty else "—"
+            k2.metric("Most vs", best_opp)
+        if "venue" in player_awards.columns:
+            best_venue = player_awards["venue"].value_counts().idxmax() if not player_awards["venue"].empty else "—"
+            k3.metric("Best Venue", best_venue[:20] + "..." if len(str(best_venue)) > 20 else best_venue)
+        if "season" in player_awards.columns:
+            best_season = player_awards["season"].value_counts().idxmax() if not player_awards["season"].empty else "—"
+            k4.metric("Best Season", best_season)
+
+        col_a, col_b, col_c = st.columns(3)
+
+        # vs each opponent
+        with col_a:
+            st.markdown("**🆚 Awards vs Each Team**")
+            if "opponent" in player_awards.columns:
+                vs_opp = player_awards["opponent"].value_counts().reset_index()
+                vs_opp.columns = ["opponent","awards"]
+                vs_opp.index += 1
+                st.dataframe(vs_opp, use_container_width=True, height=300)
+                fig_opp = px.bar(vs_opp, x="opponent", y="awards",
+                                 color="awards", color_continuous_scale=["#1a3550","#1DB954"],
+                                 text="awards")
+                fig_opp.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                      font_color="white", coloraxis_showscale=False)
+                fig_opp.update_traces(textposition="outside")
+                st.plotly_chart(fig_opp, use_container_width=True)
+
+        # at each venue
+        with col_b:
+            st.markdown("**📍 Awards at Each Venue**")
+            if "venue" in player_awards.columns:
+                vs_venue = player_awards["venue"].value_counts().reset_index()
+                vs_venue.columns = ["venue","awards"]
+                vs_venue.index += 1
+                st.dataframe(vs_venue, use_container_width=True, height=300)
+                fig_ven = px.bar(vs_venue, x="venue", y="awards",
+                                 color="awards", color_continuous_scale=["#1a3550","#00b4d8"],
+                                 text="awards")
+                fig_ven.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                      font_color="white", coloraxis_showscale=False)
+                fig_ven.update_traces(textposition="outside")
+                st.plotly_chart(fig_ven, use_container_width=True)
+
+        # per season
+        with col_c:
+            st.markdown("**📅 Awards per Season**")
+            if "season" in player_awards.columns:
+                vs_season = player_awards["season"].value_counts().reset_index()
+                vs_season.columns = ["season","awards"]
+                vs_season = vs_season.sort_values("season").reset_index(drop=True)
+                vs_season.index += 1
+                st.dataframe(vs_season, use_container_width=True, height=300)
+                fig_sea = px.bar(vs_season, x="season", y="awards",
+                                 color="awards", color_continuous_scale=["#1a3550","#f59e0b"],
+                                 text="awards")
+                fig_sea.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                      font_color="white", coloraxis_showscale=False)
+                fig_sea.update_traces(textposition="outside")
+                st.plotly_chart(fig_sea, use_container_width=True)
+
+        # ── Full match log ────────────────────────────────────────────────────
+        st.subheader(f"📋 All {selected_pom_player} MOM Matches")
+        safe_cols = [c for c in ["date","season","event","venue","team1","team2",
+                                  "opponent","winner","toss_winner","toss_decision"] if c in player_awards.columns]
+        st.dataframe(
+            player_awards[safe_cols].sort_values("date", ascending=False).reset_index(drop=True),
+            use_container_width=True, height=400
+        )
+
+    # ── 3. By team ─────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🏟️ Most MOM Awards — Team Breakdown")
+    if "team1" in match_detail.columns:
+        # For each match, attribute POM to the winning team side
+        md2 = match_detail.copy()
+        pbt = (
+            final_deliveries[final_deliveries["striker"].isin(pom_counts["player"])]
+            [["match_id","striker","batting_team"]]
+            .drop_duplicates(["match_id","striker"])
+        )
+        md2 = md2.merge(
+            pbt.rename(columns={"striker":"player_of_match","batting_team":"pom_team"}),
+            on=["match_id","player_of_match"], how="left"
+        )
+        if "pom_team" in md2.columns:
+            team_pom = md2["pom_team"].value_counts().reset_index()
+            team_pom.columns = ["team","mom_awards"]
+            team_pom.index += 1
+            col1, col2 = st.columns([1,2])
+            with col1:
+                st.dataframe(team_pom, use_container_width=True, height=350)
+            with col2:
+                fig_t = px.bar(team_pom.head(10), x="team", y="mom_awards",
+                               color="mom_awards", color_continuous_scale=["#1a3550","#1DB954"],
+                               text="mom_awards", title="MOM Awards by Team")
+                fig_t.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                    font_color="white", coloraxis_showscale=False)
+                fig_t.update_traces(textposition="outside")
+                st.plotly_chart(fig_t, use_container_width=True)
 
     st.download_button(
-        "⬇️ Download Match Results CSV",
-        match_stats.to_csv(index=False),
-        file_name="match_results.csv",
+        "⬇️ Download MOM Data CSV",
+        pom_counts.to_csv(index=False),
+        file_name="player_of_match.csv",
         mime="text/csv",
     )
 
