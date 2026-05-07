@@ -567,6 +567,59 @@ def get_player_profile(
 # PRECOMPUTE ALL PLAYER PROFILES AT ONCE (fast bulk version)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _get_partnerships(p_agg: pd.DataFrame, player: str) -> pd.DataFrame:
+    """Extract and rank partnerships for a player, sorted by avg descending."""
+    if p_agg.empty:
+        return pd.DataFrame()
+    # Player appears in either p1 or p2
+    as_p1 = p_agg[p_agg["p1"] == player].copy().rename(columns={"p2": "partner"})
+    as_p2 = p_agg[p_agg["p2"] == player].copy().rename(columns={"p1": "partner"})
+    combined = pd.concat([as_p1, as_p2], ignore_index=True)
+    if combined.empty:
+        return pd.DataFrame()
+    result = (
+        combined.groupby("partner")
+        .agg(
+            partnerships=("partnerships","sum"),
+            total_runs   =("total_runs","sum"),
+            best         =("best","max"),
+        )
+        .reset_index()
+    )
+    result["avg"] = (result["total_runs"] / result["partnerships"]).round(1)
+    return (
+        result[["partner","partnerships","total_runs","avg","best"]]
+        .sort_values("avg", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+
+def _get_partnerships(p_agg: pd.DataFrame, player: str) -> pd.DataFrame:
+    """Extract and rank partnerships for a player, sorted by avg descending."""
+    if p_agg.empty:
+        return pd.DataFrame()
+    as_p1 = p_agg[p_agg["p1"] == player].copy().rename(columns={"p2": "partner"})
+    as_p2 = p_agg[p_agg["p2"] == player].copy().rename(columns={"p1": "partner"})
+    combined = pd.concat([as_p1, as_p2], ignore_index=True)
+    if combined.empty:
+        return pd.DataFrame()
+    result = (
+        combined.groupby("partner")
+        .agg(
+            partnerships=("partnerships","sum"),
+            total_runs   =("total_runs","sum"),
+            best         =("best","max"),
+        )
+        .reset_index()
+    )
+    result["avg"] = (result["total_runs"] / result["partnerships"]).round(1)
+    return (
+        result[["partner","partnerships","total_runs","avg","best"]]
+        .sort_values("avg", ascending=False)
+        .reset_index(drop=True)
+    )
+
 def precompute_all_profiles(
     deliveries: pd.DataFrame,
     matches: pd.DataFrame,
@@ -629,6 +682,41 @@ def precompute_all_profiles(
     # Add season
     season_map = matches.set_index("match_id")["season"].to_dict() if "season" in matches.columns else {}
     top_innings_df["season"] = top_innings_df["match_id"].map(season_map)
+
+    # ── Partnership Analysis ─────────────────────────────────────────────────
+    # For each match+innings, both striker and non_striker are batting together
+    # A "partnership run" is any ball where both players are at the crease
+    # We attribute ALL runs scored in an over sequence to the partnership
+
+    # Get all legal deliveries with both players
+    p_df = bat[["match_id","innings","striker","non_striker","runs_off_bat","batting_team"]].copy()
+    p_df["runs_off_bat"] = p_df["runs_off_bat"].fillna(0)
+
+    # Create canonical partnership key (sorted so A+B == B+A)
+    p_df["p1"] = np.where(p_df["striker"] < p_df["non_striker"],
+                          p_df["striker"], p_df["non_striker"])
+    p_df["p2"] = np.where(p_df["striker"] < p_df["non_striker"],
+                          p_df["non_striker"], p_df["striker"])
+
+    # Runs per partnership per match+innings
+    p_runs = (
+        p_df.groupby(["p1","p2","match_id","innings"])["runs_off_bat"]
+        .sum()
+        .reset_index()
+        .rename(columns={"runs_off_bat":"stand_runs"})
+    )
+
+    # Aggregate across all stands
+    p_agg = (
+        p_runs.groupby(["p1","p2"])
+        .agg(
+            partnerships=("stand_runs","count"),
+            total_runs   =("stand_runs","sum"),
+            best         =("stand_runs","max"),
+        )
+        .reset_index()
+    )
+    p_agg["avg"] = (p_agg["total_runs"] / p_agg["partnerships"]).round(1)
 
     # runs per ball-level groupby
     bat_legal = bat[bat["wides"] == 0]
@@ -804,6 +892,7 @@ def precompute_all_profiles(
                     .head(10)
                     .reset_index(drop=True)
                 ),
+                "partnerships": _get_partnerships(p_agg, player),
             }
         else:
             profile["batting"] = None
