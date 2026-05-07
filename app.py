@@ -537,17 +537,18 @@ with tab2:
         )
         bowl_del = bowl_del[bowl_del["over_num"].isin(selected_overs)]
 
-    # Always start from precomputed cache — fast
-    bowling_base = _cache["bowling_all"].copy()
-
-    # Apply over filter — filter by valid bowlers in those overs
     if use_over_filter and selected_overs:
-        valid_bowlers_over = set(bowl_del["bowler"].dropna().unique())
-        bowling_base = bowling_base[bowling_base["player"].isin(valid_bowlers_over)]
-
-    # Apply bowling team filter
-    if valid_bowl_players is not None:
-        bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
+        # MUST recompute from over-filtered deliveries
+        # Cache has career totals — need stats only within selected overs
+        bowling_base = get_bowling_stats(bowl_del.reset_index(drop=True), min_overs=1)
+        # Apply team filter on top
+        if valid_bowl_players is not None:
+            bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
+    else:
+        # No over filter — use precomputed cache (fast)
+        bowling_base = _cache["bowling_all"].copy()
+        if valid_bowl_players is not None:
+            bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
 
     bowling = bowling_base[bowling_base["overs"] >= min_overs].copy()
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
