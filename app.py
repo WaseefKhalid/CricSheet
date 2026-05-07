@@ -824,6 +824,47 @@ with tab6:
                     else:
                         st.info("No innings data available.")
 
+                    # ── Partnership Analysis ──────────────────────────────
+                    st.subheader("🤝 Partnership Analysis — Ranked by Average")
+                    partnerships = bat.get("partnerships", pd.DataFrame())
+                    if not partnerships.empty:
+                        partnerships.index += 1
+                        col_p1, col_p2 = st.columns([2, 1])
+                        with col_p1:
+                            st.dataframe(
+                                partnerships.rename(columns={
+                                    "partner":       "Partner",
+                                    "partnerships":  "Innings Together",
+                                    "total_runs":    "Total Runs",
+                                    "avg":           "Avg Partnership ↓",
+                                    "best":          "Best Stand",
+                                }),
+                                use_container_width=True,
+                                height=380,
+                            )
+                        with col_p2:
+                            import plotly.express as px
+                            top_p = partnerships.head(10).copy()
+                            top_p.columns = ["Partner","Innings Together","Total Runs","Avg Partnership","Best Stand"]
+                            fig_p = px.bar(
+                                top_p, x="Partner", y="Avg Partnership",
+                                color="Avg Partnership",
+                                color_continuous_scale=["#1a3550","#1DB954"],
+                                text="Avg Partnership",
+                                title="Top 10 Partners by Avg",
+                            )
+                            fig_p.update_layout(
+                                showlegend=False, xaxis_tickangle=-35,
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                font_color="white",
+                                coloraxis_showscale=False,
+                            )
+                            fig_p.update_traces(textposition="outside")
+                            st.plotly_chart(fig_p, use_container_width=True)
+                    else:
+                        st.info("No partnership data available.")
+
                     col_a, col_b = st.columns(2)
                     with col_a:
                         st.markdown("#### 🆚 Runs vs Each Team")
