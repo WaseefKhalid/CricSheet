@@ -591,6 +591,45 @@ def precompute_all_profiles(
     bat["winner"] = bat["match_id"].map(winner_map)
     bat["bat_won"] = bat["winner"] == bat["batting_team"]
 
+    # ── Top innings: runs + balls + 4s + 6s per match+innings per player ─────
+    bat_legal_inn = bat[bat["wides"] == 0]
+    top_inn_runs  = bat.groupby(["striker","match_id","innings","batting_team"])["runs_off_bat"].sum()
+    top_inn_balls = bat_legal_inn.groupby(["striker","match_id","innings"])["runs_off_bat"].count()
+    top_inn_4s    = bat[bat["runs_off_bat"]==4].groupby(["striker","match_id","innings"]).size()
+    top_inn_6s    = bat[bat["runs_off_bat"]==6].groupby(["striker","match_id","innings"]).size()
+
+    # Build innings-level DataFrame
+    top_innings_df = top_inn_runs.reset_index().rename(columns={"runs_off_bat":"runs"})
+    top_innings_df = top_innings_df.merge(
+        top_inn_balls.reset_index().rename(columns={"runs_off_bat":"balls"}),
+        on=["striker","match_id","innings"], how="left"
+    )
+    top_innings_df = top_innings_df.merge(
+        top_inn_4s.reset_index().rename(columns={0:"fours"}),
+        on=["striker","match_id","innings"], how="left"
+    )
+    top_innings_df = top_innings_df.merge(
+        top_inn_6s.reset_index().rename(columns={0:"sixes"}),
+        on=["striker","match_id","innings"], how="left"
+    )
+    top_innings_df[["balls","fours","sixes"]] = top_innings_df[["balls","fours","sixes"]].fillna(0).astype(int)
+    top_innings_df["SR"] = (top_innings_df["runs"] / top_innings_df["balls"] * 100).round(1).where(top_innings_df["balls"] > 0, 0)
+
+    # Add opponent team & venue
+    opp_map = (
+        bat.groupby(["match_id","striker","batting_team"])
+        .first()
+        .reset_index()[["match_id","striker","batting_team","bowling_team","venue"]]
+        .drop_duplicates(["match_id","striker"])
+    )
+    top_innings_df = top_innings_df.merge(
+        opp_map.rename(columns={"bowling_team":"opponent"}),
+        on=["match_id","striker"], how="left"
+    )
+    # Add season
+    season_map = matches.set_index("match_id")["season"].to_dict() if "season" in matches.columns else {}
+    top_innings_df["season"] = top_innings_df["match_id"].map(season_map)
+
     # runs per ball-level groupby
     bat_legal = bat[bat["wides"] == 0]
 
@@ -674,6 +713,31 @@ def precompute_all_profiles(
     wkts_wins = wkts_df[wkts_df["bowl_won"] == True].groupby("bowler").size()
     wkts_loss = wkts_df[wkts_df["bowl_won"] == False].groupby("bowler").size()
 
+    # ── Top bowling figures: wickets + runs conceded per match+innings ────────
+    bowl["runs_c"] = bowl["runs_off_bat"].fillna(0) + bowl["wides"].fillna(0) + bowl["noballs"].fillna(0)
+    top_fig_wkts = wkts_df.groupby(["bowler","match_id","innings"]).size().reset_index(name="wickets")
+    top_fig_runs = bowl.groupby(["bowler","match_id","innings"])["runs_c"].sum().reset_index(name="runs_given")
+    top_fig_balls = bowl[(bowl["wides"]==0)&(bowl["noballs"]==0)].groupby(["bowler","match_id","innings"]).size().reset_index(name="balls")
+
+    top_figures_df = top_fig_wkts.merge(top_fig_runs, on=["bowler","match_id","innings"], how="left")
+    top_figures_df = top_figures_df.merge(top_fig_balls, on=["bowler","match_id","innings"], how="left")
+    top_figures_df["balls"] = top_figures_df["balls"].fillna(0).astype(int)
+    top_figures_df["overs"] = (top_figures_df["balls"] // 6 + (top_figures_df["balls"] % 6) / 10).round(1)
+
+    # Add batting team (opponent) and venue
+    bowl_opp = (
+        bowl.groupby(["match_id","bowler","bowling_team"])
+        .first()
+        .reset_index()[["match_id","bowler","bowling_team","batting_team","venue"]]
+        .drop_duplicates(["match_id","bowler"])
+    )
+    top_figures_df = top_figures_df.merge(
+        bowl_opp.rename(columns={"batting_team":"opponent"}),
+        on=["match_id","bowler"], how="left"
+    )
+    top_figures_df["season"] = top_figures_df["match_id"].map(season_map)
+    top_figures_df["figure"] = top_figures_df["wickets"].astype(str) + "/" + top_figures_df["runs_given"].astype(int).astype(str)
+
     vs_team_bowl = (
         wkts_df.groupby(["bowler", "batting_team"])
         .size()
@@ -733,6 +797,13 @@ def precompute_all_profiles(
                 "runs_in_losses": int(runs_loss.get(player, 0)),
                 "vs_team": vs_team_bat[vs_team_bat["player"] == player][["opponent","runs"]].sort_values("runs", ascending=False),
                 "vs_venue": vs_venue_bat[vs_venue_bat["player"] == player][["venue","runs"]].sort_values("runs", ascending=False),
+                "top_innings": (
+                    top_innings_df[top_innings_df["striker"] == player]
+                    [["season","opponent","venue","innings","runs","balls","SR","fours","sixes"]]
+                    .sort_values("runs", ascending=False)
+                    .head(10)
+                    .reset_index(drop=True)
+                ),
             }
         else:
             profile["batting"] = None
@@ -754,6 +825,13 @@ def precompute_all_profiles(
                 "wickets_in_losses": int(wkts_loss.get(player, 0)),
                 "vs_team":  vs_team_bowl[vs_team_bowl["player"] == player][["opponent","wickets"]].sort_values("wickets", ascending=False),
                 "vs_venue": vs_venue_bowl[vs_venue_bowl["player"] == player][["venue","wickets"]].sort_values("wickets", ascending=False),
+                "top_figures": (
+                    top_figures_df[top_figures_df["bowler"] == player]
+                    [["season","opponent","venue","innings","figure","wickets","runs_given","overs"]]
+                    .sort_values(["wickets","runs_given"], ascending=[False,True])
+                    .head(10)
+                    .reset_index(drop=True)
+                ),
             }
         else:
             profile["bowling"] = None
