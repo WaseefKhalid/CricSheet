@@ -1571,17 +1571,32 @@ with tab5:
              total_wkts=("is_wicket","sum"), matches=("match_id","nunique"))
         .reset_index()
     )
-    phase_agg["avg_runs_per_match"] = (phase_agg["total_runs"]/phase_agg["matches"]).round(1)
-    phase_agg["avg_wkts_per_match"] = (phase_agg["total_wkts"]/phase_agg["matches"]).round(2)
-    phase_agg["run_rate"]           = (phase_agg["total_runs"]/phase_agg["total_balls"]*6).round(2).where(phase_agg["total_balls"]>0,0)
-    phase_agg["balls_per_wicket"]   = (phase_agg["total_balls"]/phase_agg["total_wkts"]).round(1).where(phase_agg["total_wkts"]>0,0)
+    # Count innings (not matches) for per-innings averages
+    # Each match has 2 innings so we need innings count per phase
+    phase_innings = (
+        del_df[del_df["phase"].notna() & (del_df["phase"] != "Super (20+)")]
+        .groupby(["phase","match_id","innings"], observed=True)
+        .size()
+        .reset_index(name="balls_count")
+        .groupby("phase", observed=True)
+        .size()
+        .reset_index(name="innings_count")
+    )
+    phase_agg = phase_agg.merge(phase_innings, on="phase", how="left")
+    phase_agg["innings_count"] = phase_agg["innings_count"].fillna(1)
+
+    # Per INNINGS averages (not per match)
+    phase_agg["avg_runs_per_inn"]  = (phase_agg["total_runs"] / phase_agg["innings_count"]).round(1)
+    phase_agg["avg_wkts_per_inn"]  = (phase_agg["total_wkts"] / phase_agg["innings_count"]).round(2)
+    phase_agg["run_rate"]          = (phase_agg["total_runs"] / phase_agg["total_balls"] * 6).round(2).where(phase_agg["total_balls"]>0, 0)
+    phase_agg["balls_per_wicket"]  = (phase_agg["total_balls"] / phase_agg["total_wkts"]).round(1).where(phase_agg["total_wkts"]>0, 0)
 
     col1,col2,col3,col4 = st.columns(4)
     COLORS3 = ["#1DB954","#00b4d8","#e63946"]
     for col, metric, title in [
-        (col1,"avg_runs_per_match","Avg Runs/Match"),
+        (col1,"avg_runs_per_inn","Avg Runs/Innings"),
         (col2,"run_rate","Run Rate"),
-        (col3,"avg_wkts_per_match","Avg Wkts/Match"),
+        (col3,"avg_wkts_per_inn","Avg Wickets/Innings"),
         (col4,"balls_per_wicket","Balls/Wicket"),
     ]:
         with col:
@@ -1592,11 +1607,18 @@ with tab5:
             fig.update_traces(textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
 
-    st.dataframe(phase_agg[["phase","avg_runs_per_match","run_rate","avg_wkts_per_match","balls_per_wicket"]]
-        .rename(columns={"phase":"Phase","avg_runs_per_match":"Avg Runs/Match",
-                         "run_rate":"Run Rate","avg_wkts_per_match":"Avg Wkts/Match",
-                         "balls_per_wicket":"Balls/Wicket"}),
-        use_container_width=True, hide_index=True)
+    st.caption("All averages are **per innings** (not per match)")
+    st.dataframe(
+        phase_agg[["phase","avg_runs_per_inn","run_rate","avg_wkts_per_inn","balls_per_wicket"]]
+        .rename(columns={
+            "phase":             "Phase",
+            "avg_runs_per_inn":  "Avg Runs/Inn",
+            "run_rate":          "Run Rate",
+            "avg_wkts_per_inn":  "Avg Wickets/Inn",
+            "balls_per_wicket":  "Balls/Wicket",
+        }),
+        use_container_width=True, hide_index=True
+    )
 
     # Over-by-over
     st.divider()
@@ -1661,14 +1683,25 @@ with tab5:
     st.divider()
     st.subheader("📅 Season-by-Season Trends")
     if "season" in final_matches.columns:
-        sd = del_df.merge(final_matches[["match_id","season"]], on="match_id", how="left")
-        sa = sd.groupby("season").agg(
+        _season_map = final_matches.set_index("match_id")["season"].to_dict()
+        sd = del_df.copy()
+        sd["_season"] = sd["match_id"].map(_season_map)
+        sd = sd[sd["_season"].notna()]
+        sa = sd.groupby("_season").agg(
             runs=("total_runs","sum"), wickets=("is_wicket","sum"),
             matches=("match_id","nunique"), balls=("is_legal","sum")
-        ).reset_index().sort_values("season")
-        sa["avg_score"] = (sa["runs"]/sa["matches"]/2).round(1)
-        sa["run_rate"]  = (sa["runs"]/sa["balls"]*6).round(2)
-        sa["avg_wkts"]  = (sa["wickets"]/sa["matches"]/2).round(2)
+        ).reset_index().rename(columns={"_season":"season"}).sort_values("season")
+        inn_per_season = (
+            sd.groupby(["_season","match_id","innings"])
+            .size().reset_index(name="b")
+            .groupby("_season").size().reset_index(name="inn_count")
+            .rename(columns={"_season":"season"})
+        )
+        sa = sa.merge(inn_per_season, on="season", how="left")
+        sa["inn_count"] = sa["inn_count"].fillna(sa["matches"] * 2)
+        sa["avg_score"] = (sa["runs"]    / sa["inn_count"]).round(1)
+        sa["run_rate"]  = (sa["runs"]    / sa["balls"] * 6).round(2)
+        sa["avg_wkts"]  = (sa["wickets"] / sa["inn_count"]).round(2)
         col1,col2,col3 = st.columns(3)
         for col, y, color, title in [
             (col1,"avg_score","#1DB954","Avg Innings Score"),
