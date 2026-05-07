@@ -641,13 +641,15 @@ with tab3:
             if t is None: return "Unknown"
             return row["team2"] if row["team1"] == t else row["team1"]
 
-        # Get player's team per match from deliveries
-        player_bat_team = (
-            final_deliveries[final_deliveries["striker"] == selected_pom_player]
-            [["match_id","batting_team"]]
-            .drop_duplicates("match_id")
-        )
-        pt_map = dict(zip(player_bat_team["match_id"], player_bat_team["batting_team"]))
+        # 4-source team lookup for selected player
+        _bat   = final_deliveries[final_deliveries["striker"]      == selected_pom_player][["match_id","batting_team"]].drop_duplicates("match_id").rename(columns={"batting_team":"t"})
+        _nonst = final_deliveries[final_deliveries["non_striker"]   == selected_pom_player][["match_id","batting_team"]].drop_duplicates("match_id").rename(columns={"batting_team":"t"})
+        _bowl  = final_deliveries[final_deliveries["bowler"]        == selected_pom_player][["match_id","bowling_team"]].drop_duplicates("match_id").rename(columns={"bowling_team":"t"})
+        _dis   = pd.DataFrame()
+        if "player_dismissed" in final_deliveries.columns:
+            _dis = final_deliveries[final_deliveries["player_dismissed"] == selected_pom_player][["match_id","batting_team"]].drop_duplicates("match_id").rename(columns={"batting_team":"t"})
+        _all_lu = pd.concat([_bat, _nonst, _dis, _bowl]).drop_duplicates("match_id", keep="first")
+        pt_map = dict(zip(_all_lu["match_id"], _all_lu["t"]))
         player_awards["player_team"] = player_awards["match_id"].map(pt_map)
         player_awards["opponent"] = player_awards.apply(
             lambda r: r["team2"] if r["team1"] == r.get("player_team") else r["team1"], axis=1
@@ -737,16 +739,49 @@ with tab3:
     # ── Build enriched MOM dataframe with opponent + team ─────────────────────
     # Get player's team per match from deliveries (safe — no merge issues)
     pom_enriched = match_detail.copy()
-    bat_team_lu = (
+    # Build the most complete player→team lookup possible per match
+    # Source 1: striker (batters)
+    bat_lu = (
         final_deliveries[["match_id","striker","batting_team"]]
         .drop_duplicates(["match_id","striker"])
-        .rename(columns={"striker":"player_of_match","batting_team":"pom_team"})
+        .rename(columns={"striker":"player","batting_team":"team"})
     )
-    # Use map instead of merge to avoid duplicate column errors
-    key_map = bat_team_lu.set_index(["match_id","player_of_match"])["pom_team"].to_dict()
+    # Source 2: non_striker (batters at non-striker end)
+    nonst_lu = (
+        final_deliveries[["match_id","non_striker","batting_team"]]
+        .drop_duplicates(["match_id","non_striker"])
+        .rename(columns={"non_striker":"player","batting_team":"team"})
+    )
+    # Source 3: bowler (bowling team)
+    bowl_lu = (
+        final_deliveries[["match_id","bowler","bowling_team"]]
+        .drop_duplicates(["match_id","bowler"])
+        .rename(columns={"bowler":"player","bowling_team":"team"})
+    )
+    # Source 4: player_dismissed — their batting team
+    if "player_dismissed" in final_deliveries.columns:
+        dis_lu = (
+            final_deliveries[final_deliveries["player_dismissed"].notna()]
+            [["match_id","player_dismissed","batting_team"]]
+            .drop_duplicates(["match_id","player_dismissed"])
+            .rename(columns={"player_dismissed":"player","batting_team":"team"})
+        )
+    else:
+        dis_lu = pd.DataFrame(columns=["match_id","player","team"])
+
+    # Combine all 4 sources — first occurrence wins (batting side priority)
+    combined_lu = pd.concat([bat_lu, nonst_lu, dis_lu, bowl_lu], ignore_index=True)
+    combined_lu = combined_lu[combined_lu["player"].notna() & (combined_lu["player"] != "")]
+    combined_lu = combined_lu.drop_duplicates(["match_id","player"], keep="first")
+    key_map = combined_lu.set_index(["match_id","player"])["team"].to_dict()
+
     pom_enriched["pom_team"] = pom_enriched.apply(
         lambda r: key_map.get((r["match_id"], r["player_of_match"]), None), axis=1
     )
+    # How many POM players still unmatched (for debug)
+    unmatched = pom_enriched["pom_team"].isna().sum()
+    if unmatched > 0:
+        st.caption(f"ℹ️ {unmatched} MOM entries could not be matched to a team (data gap)")
     pom_enriched["opponent"] = pom_enriched.apply(
         lambda r: r["team2"] if r.get("team1") == r.get("pom_team") else r.get("team1",""), axis=1
     )
