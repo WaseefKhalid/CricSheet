@@ -732,37 +732,115 @@ with tab3:
             use_container_width=True, height=400
         )
 
-    # ── 3. By team ─────────────────────────────────────────────────────────────
     st.divider()
-    st.subheader("🏟️ Most MOM Awards — Team Breakdown")
-    if "team1" in match_detail.columns:
-        # For each match, attribute POM to the winning team side
-        md2 = match_detail.copy()
-        pbt = (
-            final_deliveries[final_deliveries["striker"].isin(pom_counts["player"])]
-            [["match_id","striker","batting_team"]]
-            .drop_duplicates(["match_id","striker"])
-        )
-        md2 = md2.merge(
-            pbt.rename(columns={"striker":"player_of_match","batting_team":"pom_team"}),
-            on=["match_id","player_of_match"], how="left"
-        )
-        if "pom_team" in md2.columns:
-            team_pom = md2["pom_team"].value_counts().reset_index()
-            team_pom.columns = ["team","mom_awards"]
+
+    # ── Build enriched MOM dataframe with opponent + team ─────────────────────
+    # Get player's team per match from deliveries (safe — no merge issues)
+    pom_enriched = match_detail.copy()
+    bat_team_lu = (
+        final_deliveries[["match_id","striker","batting_team"]]
+        .drop_duplicates(["match_id","striker"])
+        .rename(columns={"striker":"player_of_match","batting_team":"pom_team"})
+    )
+    # Use map instead of merge to avoid duplicate column errors
+    key_map = bat_team_lu.set_index(["match_id","player_of_match"])["pom_team"].to_dict()
+    pom_enriched["pom_team"] = pom_enriched.apply(
+        lambda r: key_map.get((r["match_id"], r["player_of_match"]), None), axis=1
+    )
+    pom_enriched["opponent"] = pom_enriched.apply(
+        lambda r: r["team2"] if r.get("team1") == r.get("pom_team") else r.get("team1",""), axis=1
+    )
+
+    # ── 3. Team MOM Breakdown ──────────────────────────────────────────────────
+    st.subheader("🏟️ MOM Awards by Team")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Which team wins most MOM awards**")
+        if "pom_team" in pom_enriched.columns:
+            team_pom = pom_enriched["pom_team"].dropna().value_counts().reset_index()
+            team_pom.columns = ["team","awards"]
             team_pom.index += 1
-            col1, col2 = st.columns([1,2])
-            with col1:
-                st.dataframe(team_pom, use_container_width=True, height=350)
-            with col2:
-                fig_t = px.bar(team_pom.head(10), x="team", y="mom_awards",
-                               color="mom_awards", color_continuous_scale=["#1a3550","#1DB954"],
-                               text="mom_awards", title="MOM Awards by Team")
-                fig_t.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                    font_color="white", coloraxis_showscale=False)
-                fig_t.update_traces(textposition="outside")
-                st.plotly_chart(fig_t, use_container_width=True)
+            st.dataframe(team_pom, use_container_width=True, height=320)
+    with col2:
+        if "pom_team" in pom_enriched.columns and not team_pom.empty:
+            fig_t = px.bar(team_pom.head(10), x="team", y="awards",
+                           color="awards", color_continuous_scale=["#1a3550","#1DB954"],
+                           text="awards", title="MOM Awards Won by Team")
+            fig_t.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                 font_color="white", coloraxis_showscale=False)
+            fig_t.update_traces(textposition="outside")
+            st.plotly_chart(fig_t, use_container_width=True)
+
+    # ── 4. Single Team MOM — select team ──────────────────────────────────────
+    st.divider()
+    st.subheader("🎯 Team MOM Deep Dive")
+    all_pom_teams = sorted(pom_enriched["pom_team"].dropna().unique().tolist())
+    sel_team_pom = st.selectbox(
+        "Select a team to see their MOM breakdown",
+        options=[None] + all_pom_teams,
+        format_func=lambda x: "— Select team —" if x is None else x,
+        key="sel_team_pom"
+    )
+    if sel_team_pom:
+        team_mom_df = pom_enriched[pom_enriched["pom_team"] == sel_team_pom].copy()
+        total_t = len(team_mom_df)
+        st.markdown(f"**{sel_team_pom}** players have won **{total_t}** MOM awards")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**🏅 Top MOM Winners**")
+            top_w = team_mom_df["player_of_match"].value_counts().reset_index()
+            top_w.columns = ["player","awards"]
+            top_w.index += 1
+            st.dataframe(top_w, use_container_width=True, height=300)
+            fig_w = px.bar(top_w.head(8), x="player", y="awards",
+                           color="awards", color_continuous_scale=["#1a3550","#1DB954"],
+                           text="awards")
+            fig_w.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                 font_color="white", coloraxis_showscale=False)
+            fig_w.update_traces(textposition="outside")
+            st.plotly_chart(fig_w, use_container_width=True)
+
+        with col2:
+            st.markdown("**🆚 MOM Awards Against Each Team**")
+            vs_t = team_mom_df["opponent"].value_counts().reset_index()
+            vs_t.columns = ["opponent","awards"]
+            vs_t.index += 1
+            st.dataframe(vs_t, use_container_width=True, height=300)
+            fig_vs = px.bar(vs_t, x="opponent", y="awards",
+                            color="awards", color_continuous_scale=["#1a3550","#00b4d8"],
+                            text="awards")
+            fig_vs.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                  plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                  font_color="white", coloraxis_showscale=False)
+            fig_vs.update_traces(textposition="outside")
+            st.plotly_chart(fig_vs, use_container_width=True)
+
+        with col3:
+            st.markdown("**📍 MOM Awards at Each Venue**")
+            if "venue" in team_mom_df.columns:
+                vs_v = team_mom_df["venue"].value_counts().reset_index()
+                vs_v.columns = ["venue","awards"]
+                vs_v.index += 1
+                st.dataframe(vs_v, use_container_width=True, height=300)
+                fig_vv = px.bar(vs_v, x="venue", y="awards",
+                                color="awards", color_continuous_scale=["#1a3550","#f59e0b"],
+                                text="awards")
+                fig_vv.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                      font_color="white", coloraxis_showscale=False)
+                fig_vv.update_traces(textposition="outside")
+                st.plotly_chart(fig_vv, use_container_width=True)
+
+        # Full log
+        st.markdown(f"**📋 All MOM wins for {sel_team_pom}**")
+        safe_cols = [c for c in ["date","season","player_of_match","opponent","venue","winner"] if c in team_mom_df.columns]
+        st.dataframe(
+            team_mom_df[safe_cols].sort_values("date", ascending=False).reset_index(drop=True),
+            use_container_width=True, height=350
+        )
 
     st.download_button(
         "⬇️ Download MOM Data CSV",
