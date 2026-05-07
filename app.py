@@ -1313,29 +1313,38 @@ with tab5:
         )
         .reset_index()
     )
-    phase_agg["avg_runs_per_match"]  = (phase_agg["total_runs"]  / phase_agg["matches"]).round(1)
-    phase_agg["avg_wkts_per_match"]  = (phase_agg["total_wkts"]  / phase_agg["matches"]).round(2)
-    phase_agg["run_rate"]            = (phase_agg["total_runs"]  / phase_agg["total_balls"] * 6).round(2).where(phase_agg["total_balls"]>0, 0)
-    phase_agg["wkt_every_n_balls"]   = (phase_agg["total_balls"] / phase_agg["total_wkts"]).round(1).where(phase_agg["total_wkts"]>0, 0)
-    phase_agg = phase_agg[phase_agg["phase"] != "Super (20+)"]
+    # Count innings per phase (not matches) for accurate per-innings avg
+    phase_inn_count = (
+        del_df[del_df["phase"].notna() & (del_df["phase"] != "Super (20+)")]
+        .groupby(["phase","match_id","innings"], observed=True)
+        .size().reset_index(name="_b")
+        .groupby("phase", observed=True).size().reset_index(name="inn_count")
+    )
+    phase_agg = phase_agg[phase_agg["phase"] != "Super (20+)"].copy()
+    phase_agg = phase_agg.merge(phase_inn_count, on="phase", how="left")
+    phase_agg["inn_count"]         = phase_agg["inn_count"].fillna(1)
+    phase_agg["avg_runs_per_inn"]  = (phase_agg["total_runs"]  / phase_agg["inn_count"]).round(1)
+    phase_agg["avg_wkts_per_inn"]  = (phase_agg["total_wkts"]  / phase_agg["inn_count"]).round(2)
+    phase_agg["run_rate"]          = (phase_agg["total_runs"]  / phase_agg["total_balls"] * 6).round(2).where(phase_agg["total_balls"]>0, 0)
+    phase_agg["balls_per_wicket"]  = (phase_agg["total_balls"] / phase_agg["total_wkts"]).round(1).where(phase_agg["total_wkts"]>0, 0)
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**💨 Avg Runs per Match by Phase**")
-        fig_pr = px.bar(phase_agg, x="phase", y="avg_runs_per_match",
+        st.markdown("**💨 Avg Runs per Innings by Phase**")
+        fig_pr = px.bar(phase_agg, x="phase", y="avg_runs_per_inn",
                         color="phase",
                         color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="avg_runs_per_match")
+                        text="avg_runs_per_inn")
         fig_pr.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_pr.update_traces(textposition="outside")
         st.plotly_chart(fig_pr, use_container_width=True)
     with col2:
-        st.markdown("**🎳 Avg Wickets per Match by Phase**")
-        fig_pw = px.bar(phase_agg, x="phase", y="avg_wkts_per_match",
+        st.markdown("**🎳 Avg Wickets per Innings by Phase**")
+        fig_pw = px.bar(phase_agg, x="phase", y="avg_wkts_per_inn",
                         color="phase",
                         color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="avg_wkts_per_match")
+                        text="avg_wkts_per_inn")
         fig_pw.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_pw.update_traces(textposition="outside")
@@ -1353,25 +1362,26 @@ with tab5:
         fig_rr.update_traces(textposition="outside")
         st.plotly_chart(fig_rr, use_container_width=True)
     with col4:
-        st.markdown("**⚡ 1 Wicket Every N Balls by Phase**")
-        fig_wb = px.bar(phase_agg, x="phase", y="wkt_every_n_balls",
+        st.markdown("**⚡ Balls per Wicket by Phase**")
+        fig_wb = px.bar(phase_agg, x="phase", y="balls_per_wicket",
                         color="phase",
                         color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="wkt_every_n_balls")
+                        text="balls_per_wicket")
         fig_wb.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_wb.update_traces(textposition="outside")
         st.plotly_chart(fig_wb, use_container_width=True)
 
+    st.caption("All values are **per innings** — PP avg ~54 runs is correct for T20")
     # Phase table
     st.dataframe(
-        phase_agg[["phase","avg_runs_per_match","run_rate","avg_wkts_per_match","wkt_every_n_balls"]]
+        phase_agg[["phase","avg_runs_per_inn","run_rate","avg_wkts_per_inn","balls_per_wicket"]]
         .rename(columns={
             "phase":"Phase",
-            "avg_runs_per_match":"Avg Runs/Match",
+            "avg_runs_per_inn":"Avg Runs/Inn",
             "run_rate":"Run Rate",
-            "avg_wkts_per_match":"Avg Wkts/Match",
-            "wkt_every_n_balls":"Balls/Wicket",
+            "avg_wkts_per_inn":"Avg Wkts/Inn",
+            "balls_per_wicket":"Balls/Wicket",
         }),
         use_container_width=True, hide_index=True
     )
