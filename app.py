@@ -746,51 +746,74 @@ with tab3:
     # ── Build enriched MOM dataframe with opponent + team ─────────────────────
     # Get player's team per match from deliveries (safe — no merge issues)
     pom_enriched = match_detail.copy()
-    # Build the most complete player→team lookup possible per match
-    # Source 1: striker (batters)
-    bat_lu = (
-        final_deliveries[["match_id","striker","batting_team"]]
-        .drop_duplicates(["match_id","striker"])
-        .rename(columns={"striker":"player","batting_team":"team"})
-    )
-    # Source 2: non_striker (batters at non-striker end)
-    nonst_lu = (
-        final_deliveries[["match_id","non_striker","batting_team"]]
-        .drop_duplicates(["match_id","non_striker"])
-        .rename(columns={"non_striker":"player","batting_team":"team"})
-    )
-    # Source 3: bowler (bowling team)
-    bowl_lu = (
-        final_deliveries[["match_id","bowler","bowling_team"]]
-        .drop_duplicates(["match_id","bowler"])
-        .rename(columns={"bowler":"player","bowling_team":"team"})
-    )
-    # Source 4: player_dismissed — their batting team
-    if "player_dismissed" in final_deliveries.columns:
-        dis_lu = (
-            final_deliveries[final_deliveries["player_dismissed"].notna()]
-            [["match_id","player_dismissed","batting_team"]]
-            .drop_duplicates(["match_id","player_dismissed"])
-            .rename(columns={"player_dismissed":"player","batting_team":"team"})
-        )
-    else:
-        dis_lu = pd.DataFrame(columns=["match_id","player","team"])
+    # ── Build match_id → {player → team} roster dict ────────────────────────
+    # Collect all player appearances per match with their team
+    src_cols = [
+        ("striker",          "batting_team"),
+        ("non_striker",      "batting_team"),
+        ("player_dismissed", "batting_team"),
+        ("bowler",           "bowling_team"),
+    ]
+    all_lu_parts = []
+    for player_col, team_col in src_cols:
+        if player_col in final_deliveries.columns and team_col in final_deliveries.columns:
+            part = (
+                final_deliveries[final_deliveries[player_col].notna()]
+                [["match_id", player_col, team_col]]
+                .drop_duplicates(["match_id", player_col])
+                .rename(columns={player_col: "player", team_col: "team"})
+            )
+            all_lu_parts.append(part)
 
-    # Combine all 4 sources — first occurrence wins (batting side priority)
-    combined_lu = pd.concat([bat_lu, nonst_lu, dis_lu, bowl_lu], ignore_index=True)
-    combined_lu = combined_lu[combined_lu["player"].notna() & (combined_lu["player"] != "")]
-    combined_lu = combined_lu.drop_duplicates(["match_id","player"], keep="first")
-    key_map = combined_lu.set_index(["match_id","player"])["team"].to_dict()
+    all_lu = pd.concat(all_lu_parts, ignore_index=True)
+    all_lu = all_lu[all_lu["player"].notna() & (all_lu["player"].astype(str).str.strip() != "")]
 
-    pom_enriched["pom_team"] = pom_enriched.apply(
-        lambda r: key_map.get((r["match_id"], r["player_of_match"]), None), axis=1
-    )
-    # How many POM players still unmatched (for debug)
-    unmatched = pom_enriched["pom_team"].isna().sum()
-    if unmatched > 0:
-        st.caption(f"ℹ️ {unmatched} MOM entries could not be matched to a team (data gap)")
+    # Build {match_id: {player: team}} — batting side first so it wins on conflict
+    match_roster: dict = {}
+    for _, row in all_lu.iterrows():
+        mid = row["match_id"]
+        if mid not in match_roster:
+            match_roster[mid] = {}
+        if row["player"] not in match_roster[mid]:  # first seen = priority
+            match_roster[mid][row["player"]] = row["team"]
+
+    # Also build match → {team → set(players)} for fallback validation
+    team_roster: dict = {}
+    for mid, players in match_roster.items():
+        team_roster[mid] = {}
+        for player, team in players.items():
+            if team not in team_roster[mid]:
+                team_roster[mid][team] = set()
+            team_roster[mid][team].add(player)
+
+    def _get_pom_team(row):
+        """
+        Find which team a POM player played for in this specific match.
+        Uses pre-built roster dicts — fast and accurate.
+        """
+        player = row["player_of_match"]
+        mid    = row["match_id"]
+        t1     = str(row.get("team1", "") or "")
+        t2     = str(row.get("team2", "") or "")
+
+        # Step 1: direct lookup
+        found = match_roster.get(mid, {}).get(player)
+        if found and found in (t1, t2):
+            return found
+
+        # Step 2: scan team rosters for this match
+        match_teams = team_roster.get(mid, {})
+        if player in match_teams.get(t1, set()):
+            return t1
+        if player in match_teams.get(t2, set()):
+            return t2
+
+        # Step 3: fallback — return whatever was found even if not validated
+        return found
+
+    pom_enriched["pom_team"] = pom_enriched.apply(_get_pom_team, axis=1)
     pom_enriched["opponent"] = pom_enriched.apply(
-        lambda r: r["team2"] if r.get("team1") == r.get("pom_team") else r.get("team1",""), axis=1
+        lambda r: r["team2"] if str(r.get("team1","")) == str(r.get("pom_team","")) else r.get("team1",""), axis=1
     )
 
     st.divider()
