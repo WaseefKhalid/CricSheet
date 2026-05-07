@@ -389,6 +389,18 @@ k3.metric("🏃 Total Runs", f"{int(final_deliveries['runs_off_bat'].sum() + fin
 k4.metric("🎯 Total Wickets", f"{int(final_deliveries['wicket_type'].notna().sum()):,}")
 k5.metric("🏟️ Venues", f"{final_matches['venue'].nunique()}")
 
+# Data range row
+if "date" in final_matches.columns:
+    _dates = final_matches["date"].dropna().sort_values()
+    if not _dates.empty:
+        _earliest = _dates.iloc[0]
+        _latest   = _dates.iloc[-1]
+        _fmt = lambda d: pd.Timestamp(d).strftime("%d %b %Y") if pd.notna(d) else "—"
+        dr1, dr2, dr3 = st.columns(3)
+        dr1.markdown(f"📅 **Earliest match:** {_fmt(_earliest)}")
+        dr2.markdown(f"📅 **Latest match:** {_fmt(_latest)}")
+        dr3.markdown(f"📆 **Data span:** {int((_latest - _earliest).days / 365.25)} years")
+
 st.markdown("---")
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
