@@ -571,34 +571,6 @@ def _get_partnerships(p_agg: pd.DataFrame, player: str) -> pd.DataFrame:
     """Extract and rank partnerships for a player, sorted by avg descending."""
     if p_agg.empty:
         return pd.DataFrame()
-    # Player appears in either p1 or p2
-    as_p1 = p_agg[p_agg["p1"] == player].copy().rename(columns={"p2": "partner"})
-    as_p2 = p_agg[p_agg["p2"] == player].copy().rename(columns={"p1": "partner"})
-    combined = pd.concat([as_p1, as_p2], ignore_index=True)
-    if combined.empty:
-        return pd.DataFrame()
-    result = (
-        combined.groupby("partner")
-        .agg(
-            partnerships=("partnerships","sum"),
-            total_runs   =("total_runs","sum"),
-            best         =("best","max"),
-        )
-        .reset_index()
-    )
-    result["avg"] = (result["total_runs"] / result["partnerships"]).round(1)
-    return (
-        result[["partner","partnerships","total_runs","avg","best"]]
-        .sort_values("avg", ascending=False)
-        .reset_index(drop=True)
-    )
-
-
-
-def _get_partnerships(p_agg: pd.DataFrame, player: str) -> pd.DataFrame:
-    """Extract and rank partnerships for a player, sorted by avg descending."""
-    if p_agg.empty:
-        return pd.DataFrame()
     as_p1 = p_agg[p_agg["p1"] == player].copy().rename(columns={"p2": "partner"})
     as_p2 = p_agg[p_agg["p2"] == player].copy().rename(columns={"p1": "partner"})
     combined = pd.concat([as_p1, as_p2], ignore_index=True)
