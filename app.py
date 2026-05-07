@@ -825,33 +825,50 @@ with tab6:
                         st.info("No innings data available.")
 
                     # ── Partnership Analysis ──────────────────────────────
-                    st.subheader("🤝 Partnership Analysis — Ranked by Average")
+                    st.subheader("🤝 Partnership Analysis")
                     partnerships = bat.get("partnerships", pd.DataFrame())
                     if not partnerships.empty:
-                        partnerships.index += 1
+                        # Min runs filter
+                        p_col1, p_col2 = st.columns([1, 3])
+                        with p_col1:
+                            min_p_runs = st.number_input(
+                                "Min Total Runs together",
+                                min_value=0, value=50, step=10,
+                                key="min_p_runs"
+                            )
+                        # Apply filter + sort by avg descending
+                        p_filtered = (
+                            partnerships[partnerships["total_runs"] >= min_p_runs]
+                            .sort_values("avg", ascending=False)
+                            .reset_index(drop=True)
+                        )
+                        p_filtered.index += 1
+
                         col_p1, col_p2 = st.columns([2, 1])
                         with col_p1:
+                            st.caption(f"{len(p_filtered)} partners with ≥ {min_p_runs} runs together — sorted by Avg ↓")
                             st.dataframe(
-                                partnerships.rename(columns={
-                                    "partner":       "Partner",
-                                    "partnerships":  "Innings Together",
-                                    "total_runs":    "Total Runs",
-                                    "avg":           "Avg Partnership ↓",
-                                    "best":          "Best Stand",
+                                p_filtered.rename(columns={
+                                    "partner":      "Partner",
+                                    "partnerships": "Innings",
+                                    "total_runs":   "Total Runs",
+                                    "avg":          "Avg ↓",
+                                    "best":         "Best Stand",
+                                    "sr":           "SR",
                                 }),
                                 use_container_width=True,
-                                height=380,
+                                height=400,
                             )
                         with col_p2:
                             import plotly.express as px
-                            top_p = partnerships.head(10).copy()
-                            top_p.columns = ["Partner","Innings Together","Total Runs","Avg Partnership","Best Stand"]
+                            top_p = p_filtered.head(10).copy()
                             fig_p = px.bar(
-                                top_p, x="Partner", y="Avg Partnership",
-                                color="Avg Partnership",
+                                top_p, x="partner", y="avg",
+                                color="avg",
                                 color_continuous_scale=["#1a3550","#1DB954"],
-                                text="Avg Partnership",
-                                title="Top 10 Partners by Avg",
+                                text="avg",
+                                title="Top 10 by Avg",
+                                labels={"partner":"Partner","avg":"Avg"},
                             )
                             fig_p.update_layout(
                                 showlegend=False, xaxis_tickangle=-35,
