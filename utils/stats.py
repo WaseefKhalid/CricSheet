@@ -657,6 +657,70 @@ def precompute_all_profiles(
     season_map = matches.set_index("match_id")["season"].to_dict() if "season" in matches.columns else {}
     top_innings_df["season"] = top_innings_df["match_id"].map(season_map)
 
+    # ── Batting Position Stats ───────────────────────────────────────────────
+    # Compute batting position per player per match+innings
+    bat_pos = bat[bat["wides"] == 0][["match_id","innings","striker","runs_off_bat","batting_team"]].copy()
+    bat_pos["ball_num"] = bat[bat["wides"] == 0]["ball"].apply(
+        lambda x: float(str(x).replace(",",".")) if pd.notna(x) else 0
+    )
+    # First ball each batter faced per match+innings
+    first_balls = (
+        bat_pos.sort_values("ball_num")
+        .drop_duplicates(subset=["match_id","innings","striker"], keep="first")
+        .reset_index(drop=True)
+    )
+    first_balls["position"] = (
+        first_balls.groupby(["match_id","innings"])["ball_num"]
+        .rank(method="first")
+        .astype(int)
+    )
+    # Runs per innings
+    inns_runs_for_pos = (
+        bat_pos.groupby(["match_id","innings","striker"])["runs_off_bat"]
+        .sum()
+        .reset_index()
+        .rename(columns={"runs_off_bat":"inns_runs"})
+    )
+    # Balls per innings (legal)
+    inns_balls_for_pos = (
+        bat_pos.groupby(["match_id","innings","striker"])
+        .size()
+        .reset_index(name="inns_balls")
+    )
+    # Dismissals per innings
+    dis_per_inn = (
+        deliveries[
+            deliveries["player_dismissed"].notna() &
+            deliveries["wicket_type"].notna()
+        ][["match_id","innings","player_dismissed"]]
+        .rename(columns={"player_dismissed":"striker"})
+        .assign(dismissed=1)
+    )
+    # Merge everything with position
+    pos_df = first_balls[["match_id","innings","striker","position"]].copy()
+    pos_df = pos_df.merge(inns_runs_for_pos, on=["match_id","innings","striker"], how="left")
+    pos_df = pos_df.merge(inns_balls_for_pos, on=["match_id","innings","striker"], how="left")
+    pos_df = pos_df.merge(dis_per_inn, on=["match_id","innings","striker"], how="left")
+    pos_df["inns_runs"]  = pos_df["inns_runs"].fillna(0)
+    pos_df["inns_balls"] = pos_df["inns_balls"].fillna(0).astype(int)
+    pos_df["dismissed"]  = pos_df["dismissed"].fillna(0).astype(int)
+
+    # Aggregate by player + position
+    pos_stats_df = (
+        pos_df.groupby(["striker","position"])
+        .agg(
+            innings   =("match_id","count"),
+            runs      =("inns_runs","sum"),
+            balls     =("inns_balls","sum"),
+            dismissals=("dismissed","sum"),
+            highest   =("inns_runs","max"),
+        )
+        .reset_index()
+    )
+    pos_stats_df["average"]     = (pos_stats_df["runs"] / pos_stats_df["dismissals"]).round(2).where(pos_stats_df["dismissals"] > 0, pos_stats_df["runs"].astype(float))
+    pos_stats_df["strike_rate"] = (pos_stats_df["runs"] / pos_stats_df["balls"] * 100).round(2).where(pos_stats_df["balls"] > 0, 0)
+    pos_stats_df["not_outs"]    = pos_stats_df["innings"] - pos_stats_df["dismissals"]
+
     # ── Partnership Analysis ─────────────────────────────────────────────────
     # For each match+innings, both striker and non_striker are batting together
     # A "partnership run" is any ball where both players are at the crease
@@ -887,6 +951,12 @@ def precompute_all_profiles(
                     .reset_index(drop=True)
                 ),
                 "partnerships": _get_partnerships(p_agg, player),
+                "position_stats": (
+                    pos_stats_df[pos_stats_df["striker"] == player]
+                    [["position","innings","runs","highest","average","strike_rate","balls","not_outs"]]
+                    .sort_values("position")
+                    .reset_index(drop=True)
+                ),
             }
         else:
             profile["batting"] = None
