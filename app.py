@@ -638,68 +638,274 @@ with tab3:
 # TAB 4 — TEAM STATS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.subheader("🏆 Team Performance")
+    import plotly.express as px
 
-    # Filter cached team stats to teams in current match filter
+    # Active teams for filtering
     active_teams = set()
     if "team1" in final_matches.columns: active_teams.update(final_matches["team1"].dropna().unique())
     if "team2" in final_matches.columns: active_teams.update(final_matches["team2"].dropna().unique())
+
+    # ── Team selector for dashboard ───────────────────────────────────────────
+    all_team_list = sorted(active_teams) if active_teams else sorted(
+        list(deliveries_df["batting_team"].dropna().unique())
+    )
+    dashboard_team = st.selectbox(
+        "🔍 Select a team for detailed dashboard (optional)",
+        options=[None] + all_team_list,
+        format_func=lambda x: "— View all teams overview —" if x is None else x,
+        key="dashboard_team"
+    )
+
+    # ── OVERVIEW — shown always ───────────────────────────────────────────────
+    st.subheader("🏆 Team Performance Overview")
     team_stats = _cache["team_stats"]
     if active_teams:
         team_stats = team_stats[team_stats["team"].isin(active_teams)]
-    st.dataframe(team_stats, use_container_width=True, height=400)
+    st.dataframe(team_stats, use_container_width=True, height=350)
 
-    st.subheader("🏏 Batting First vs Batting Second")
-    bat_order = _cache["bat_order_stats"]
-    if active_teams:
-        bat_order = bat_order[bat_order["team"].isin(active_teams)]
+    # ── TEAM DASHBOARD — shown when team selected ─────────────────────────────
+    if dashboard_team:
+        st.divider()
+        st.subheader(f"📊 {dashboard_team} — Full Team Dashboard")
 
-    st.caption("Win records when batting first vs chasing — filtered to current match selection")
-    st.dataframe(bat_order, use_container_width=True, height=400)
+        # Filter deliveries and matches for this team
+        tm_bat_del  = final_deliveries[final_deliveries["batting_team"]  == dashboard_team]
+        tm_bowl_del = final_deliveries[final_deliveries["bowling_team"]  == dashboard_team]
+        tm_matches  = final_matches[
+            (final_matches["team1"] == dashboard_team) |
+            (final_matches["team2"] == dashboard_team)
+        ]
 
-    import plotly.express as px
-    if not bat_order.empty:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Win % Batting First vs Second**")
-            melt = bat_order[["team","win%_bat_first","win%_bat_second"]].melt(
-                id_vars="team", var_name="innings", value_name="win_%"
+        # ── KPIs ─────────────────────────────────────────────────────────────
+        tm_won    = int((tm_matches["winner"] == dashboard_team).sum()) if "winner" in tm_matches.columns else 0
+        tm_played = len(tm_matches)
+        tm_runs   = int(tm_bat_del["runs_off_bat"].sum() + tm_bat_del["extras"].sum())
+        tm_wkts   = int(tm_bowl_del["wicket_type"].notna().sum())
+        tm_winpct = round(tm_won / tm_played * 100, 1) if tm_played > 0 else 0
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("Matches", tm_played)
+        k2.metric("Won", tm_won)
+        k3.metric("Win %", f"{tm_winpct}%")
+        k4.metric("Runs Scored", f"{tm_runs:,}")
+        k5.metric("Wickets Taken", f"{tm_wkts:,}")
+
+        st.divider()
+
+        # ── SUB TABS ──────────────────────────────────────────────────────────
+        t1, t2, t3, t4, t5 = st.tabs([
+            "🏏 Top Batters",
+            "🎳 Top Bowlers",
+            "📍 Venue Stats",
+            "🆚 vs Each Team",
+            "🪙 Toss & Bat Order",
+        ])
+
+        # ── TOP BATTERS ───────────────────────────────────────────────────────
+        with t1:
+            st.subheader(f"🏏 Top Run Scorers — {dashboard_team}")
+            tm_bat_stats = get_batting_stats(tm_bat_del.reset_index(drop=True), min_innings=1)
+            tm_bat_stats = tm_bat_stats.sort_values("runs", ascending=False).reset_index(drop=True)
+            tm_bat_stats.index += 1
+
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.dataframe(tm_bat_stats, use_container_width=True, height=450)
+            with col2:
+                top10 = tm_bat_stats.head(10)
+                fig = px.bar(top10, x="player", y="runs", color="runs",
+                             color_continuous_scale=["#1a3550","#1DB954"],
+                             text="runs", title="Top 10 Run Scorers")
+                fig.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                  plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                  font_color="white", coloraxis_showscale=False)
+                fig.update_traces(textposition="outside")
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.download_button("⬇️ Download Batting CSV",
+                tm_bat_stats.to_csv(index=False), file_name=f"{dashboard_team}_batting.csv")
+
+        # ── TOP BOWLERS ───────────────────────────────────────────────────────
+        with t2:
+            st.subheader(f"🎳 Top Wicket Takers — {dashboard_team}")
+            tm_bowl_stats = get_bowling_stats(tm_bowl_del.reset_index(drop=True), min_overs=1)
+            tm_bowl_stats = tm_bowl_stats.sort_values("wickets", ascending=False).reset_index(drop=True)
+            tm_bowl_stats.index += 1
+
+            col1, col2 = st.columns([3, 2])
+            with col1:
+                st.dataframe(tm_bowl_stats, use_container_width=True, height=450)
+            with col2:
+                top10b = tm_bowl_stats.head(10)
+                fig2 = px.bar(top10b, x="player", y="wickets", color="wickets",
+                              color_continuous_scale=["#1a3550","#00b4d8"],
+                              text="wickets", title="Top 10 Wicket Takers")
+                fig2.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                   font_color="white", coloraxis_showscale=False)
+                fig2.update_traces(textposition="outside")
+                st.plotly_chart(fig2, use_container_width=True)
+
+            st.download_button("⬇️ Download Bowling CSV",
+                tm_bowl_stats.to_csv(index=False), file_name=f"{dashboard_team}_bowling.csv")
+
+        # ── VENUE STATS ───────────────────────────────────────────────────────
+        with t3:
+            st.subheader(f"📍 Venue Performance — {dashboard_team}")
+            if "venue" in tm_matches.columns:
+                venue_df = tm_matches.copy()
+                venue_df["won"] = (venue_df["winner"] == dashboard_team).astype(int)
+                venue_stats = (
+                    venue_df.groupby("venue")
+                    .agg(matches=("match_id","count"), won=("won","sum"))
+                    .reset_index()
+                )
+                venue_stats["lost"]  = venue_stats["matches"] - venue_stats["won"]
+                venue_stats["win_%"] = (venue_stats["won"] / venue_stats["matches"] * 100).round(1)
+                venue_stats = venue_stats.sort_values("matches", ascending=False).reset_index(drop=True)
+                venue_stats.index += 1
+
+                col1, col2 = st.columns([2, 3])
+                with col1:
+                    st.dataframe(venue_stats, use_container_width=True, height=400)
+                with col2:
+                    fig3 = px.bar(venue_stats, x="venue", y=["won","lost"],
+                                  barmode="stack",
+                                  color_discrete_map={"won":"#1DB954","lost":"#e63946"},
+                                  title="Won vs Lost at each Venue")
+                    fig3.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
+                                       paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                    st.plotly_chart(fig3, use_container_width=True)
+
+                # Runs at each venue
+                if "venue" in tm_bat_del.columns:
+                    v_runs = (
+                        tm_bat_del.groupby("venue")
+                        .agg(runs=("runs_off_bat","sum"), balls=("wides","count"))
+                        .reset_index()
+                    )
+                    st.markdown("**Runs Scored at Each Venue**")
+                    st.dataframe(v_runs.sort_values("runs", ascending=False).reset_index(drop=True),
+                                 use_container_width=True, height=250)
+            else:
+                st.info("Venue data not available.")
+
+        # ── VS EACH TEAM ──────────────────────────────────────────────────────
+        with t4:
+            st.subheader(f"🆚 {dashboard_team} vs Each Opponent")
+            vs_df = tm_matches.copy()
+            vs_df["opponent"] = vs_df.apply(
+                lambda r: r["team2"] if r["team1"] == dashboard_team else r["team1"], axis=1
             )
-            melt["innings"] = melt["innings"].map({
-                "win%_bat_first": "Bat First",
-                "win%_bat_second": "Bat Second"
-            })
-            fig = px.bar(melt, x="team", y="win_%", color="innings", barmode="group",
-                         color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
-                         text_auto=".1f")
-            fig.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
-                              paper_bgcolor="rgba(0,0,0,0)", font_color="white", showlegend=True)
-            st.plotly_chart(fig, use_container_width=True)
-        with col2:
-            st.markdown("**Matches Batted First vs Second**")
-            melt2 = bat_order[["team","bat_first","bat_second"]].melt(
-                id_vars="team", var_name="innings", value_name="matches"
-            )
-            melt2["innings"] = melt2["innings"].map({
-                "bat_first": "Bat First",
-                "bat_second": "Bat Second"
-            })
-            fig2 = px.bar(melt2, x="team", y="matches", color="innings", barmode="group",
-                          color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
-                          text_auto=True)
-            fig2.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
-                               paper_bgcolor="rgba(0,0,0,0)", font_color="white", showlegend=True)
-            st.plotly_chart(fig2, use_container_width=True)
+            vs_df["won"] = (vs_df["winner"] == dashboard_team).astype(int)
 
-    st.subheader("🪙 Toss Analysis")
-    toss = _cache["toss_stats"]
-    if active_teams:
-        toss = toss[toss["toss_winner"].isin(active_teams)]
-    st.dataframe(toss, use_container_width=True)
+            vs_stats = (
+                vs_df.groupby("opponent")
+                .agg(matches=("match_id","count"), won=("won","sum"))
+                .reset_index()
+            )
+            vs_stats["lost"]  = vs_stats["matches"] - vs_stats["won"]
+            vs_stats["win_%"] = (vs_stats["won"] / vs_stats["matches"] * 100).round(1)
+            vs_stats = vs_stats.sort_values("matches", ascending=False).reset_index(drop=True)
+            vs_stats.index += 1
+
+            col1, col2 = st.columns([2, 3])
+            with col1:
+                st.dataframe(vs_stats, use_container_width=True, height=400)
+            with col2:
+                fig4 = px.bar(vs_stats, x="opponent", y="win_%",
+                              color="win_%",
+                              color_continuous_scale=["#e63946","#f59e0b","#1DB954"],
+                              text="win_%", title="Win % vs Each Opponent")
+                fig4.update_layout(showlegend=False, xaxis_tickangle=-35,
+                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                   font_color="white", coloraxis_showscale=False)
+                fig4.update_traces(textposition="outside")
+                st.plotly_chart(fig4, use_container_width=True)
+
+            st.download_button("⬇️ Download vs Teams CSV",
+                vs_stats.to_csv(index=False), file_name=f"{dashboard_team}_vs_teams.csv")
+
+        # ── TOSS & BAT ORDER ─────────────────────────────────────────────────
+        with t5:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("🪙 Toss Analysis")
+                toss_tm = _cache["toss_stats"]
+                toss_tm = toss_tm[toss_tm["toss_winner"] == dashboard_team]
+                if not toss_tm.empty:
+                    st.dataframe(toss_tm, use_container_width=True)
+                    fig5 = px.pie(
+                        toss_tm, values="toss_wins",
+                        names="toss_winner",
+                        title="Toss Decisions",
+                        color_discrete_sequence=["#1DB954","#00b4d8"]
+                    )
+                    fig5.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                    st.plotly_chart(fig5, use_container_width=True)
+
+            with col2:
+                st.subheader("🏏 Bat First vs Second")
+                bat_ord_tm = _cache["bat_order_stats"]
+                bat_ord_tm = bat_ord_tm[bat_ord_tm["team"] == dashboard_team]
+                if not bat_ord_tm.empty:
+                    st.dataframe(bat_ord_tm, use_container_width=True)
+                    melt_tm = bat_ord_tm[["team","win%_bat_first","win%_bat_second"]].melt(
+                        id_vars="team", var_name="method", value_name="win_%"
+                    )
+                    melt_tm["method"] = melt_tm["method"].map({
+                        "win%_bat_first":"Bat First","win%_bat_second":"Bat Second"
+                    })
+                    fig6 = px.bar(melt_tm, x="method", y="win_%",
+                                  color="method",
+                                  color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"},
+                                  text="win_%", title="Win % by Innings")
+                    fig6.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
+                                       paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                    fig6.update_traces(textposition="outside")
+                    st.plotly_chart(fig6, use_container_width=True)
+
+    else:
+        # ── OVERVIEW CHARTS (no team selected) ───────────────────────────────
+        st.subheader("🏏 Batting First vs Batting Second")
+        bat_order = _cache["bat_order_stats"]
+        if active_teams:
+            bat_order = bat_order[bat_order["team"].isin(active_teams)]
+        st.caption("Win records when batting first vs chasing")
+        st.dataframe(bat_order, use_container_width=True, height=350)
+
+        if not bat_order.empty:
+            col1, col2 = st.columns(2)
+            with col1:
+                melt = bat_order[["team","win%_bat_first","win%_bat_second"]].melt(
+                    id_vars="team", var_name="innings", value_name="win_%"
+                )
+                melt["innings"] = melt["innings"].map({"win%_bat_first":"Bat First","win%_bat_second":"Bat Second"})
+                fig = px.bar(melt, x="team", y="win_%", color="innings", barmode="group",
+                             color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"}, text_auto=".1f")
+                fig.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
+                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                melt2 = bat_order[["team","bat_first","bat_second"]].melt(
+                    id_vars="team", var_name="innings", value_name="matches"
+                )
+                melt2["innings"] = melt2["innings"].map({"bat_first":"Bat First","bat_second":"Bat Second"})
+                fig2 = px.bar(melt2, x="team", y="matches", color="innings", barmode="group",
+                              color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"}, text_auto=True)
+                fig2.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
+                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                st.plotly_chart(fig2, use_container_width=True)
+
+        st.subheader("🪙 Toss Analysis")
+        toss = _cache["toss_stats"]
+        if active_teams:
+            toss = toss[toss["toss_winner"].isin(active_teams)]
+        st.dataframe(toss, use_container_width=True)
 
     st.download_button(
         "⬇️ Download Team Stats CSV",
-        bat_order.to_csv(index=False),
+        team_stats.to_csv(index=False),
         file_name="team_stats.csv",
         mime="text/csv",
     )
