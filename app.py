@@ -1005,6 +1005,65 @@ with tab6:
                     c9.metric("4s",           bat["fours"])
                     c10.metric("6s",          bat["sixes"])
 
+                    # ── Batting Position Breakdown ────────────────────────
+                    if show_role in ("Batting Only",):
+                        st.subheader("📊 Stats by Batting Position")
+                        pos_stats = bat.get("position_stats", pd.DataFrame())
+                        if not pos_stats.empty:
+                            pos_stats.index = pos_stats["position"]
+                            pos_display = pos_stats.drop(columns=["position"]).rename(columns={
+                                "innings":      "Innings",
+                                "runs":         "Runs",
+                                "highest":      "Highest",
+                                "average":      "Average",
+                                "strike_rate":  "Strike Rate",
+                                "balls":        "Balls",
+                                "not_outs":     "Not Outs",
+                            })
+                            col_pos1, col_pos2 = st.columns([2, 2])
+                            with col_pos1:
+                                st.caption("Stats computed only from innings batted at each position")
+                                st.dataframe(pos_display, use_container_width=True, height=350)
+                            with col_pos2:
+                                import plotly.express as px
+                                fig_pos = px.bar(
+                                    pos_stats, x="position", y="runs",
+                                    color="average",
+                                    color_continuous_scale=["#1a3550","#1DB954"],
+                                    text="runs",
+                                    title="Runs by Batting Position",
+                                    labels={"position":"Position","runs":"Runs","average":"Avg"},
+                                    category_orders={"position": sorted(pos_stats["position"].tolist())},
+                                )
+                                fig_pos.update_layout(
+                                    plot_bgcolor="rgba(0,0,0,0)",
+                                    paper_bgcolor="rgba(0,0,0,0)",
+                                    font_color="white",
+                                    xaxis=dict(tickmode="linear", dtick=1),
+                                )
+                                fig_pos.update_traces(textposition="outside")
+                                st.plotly_chart(fig_pos, use_container_width=True)
+
+                                # SR by position
+                                fig_sr = px.bar(
+                                    pos_stats, x="position", y="strike_rate",
+                                    color="strike_rate",
+                                    color_continuous_scale=["#1a3550","#00b4d8"],
+                                    text="strike_rate",
+                                    title="Strike Rate by Batting Position",
+                                    labels={"position":"Position","strike_rate":"SR"},
+                                )
+                                fig_sr.update_layout(
+                                    plot_bgcolor="rgba(0,0,0,0)",
+                                    paper_bgcolor="rgba(0,0,0,0)",
+                                    font_color="white",
+                                    xaxis=dict(tickmode="linear", dtick=1),
+                                )
+                                fig_sr.update_traces(textposition="outside")
+                                st.plotly_chart(fig_sr, use_container_width=True)
+                        else:
+                            st.info("No position data available.")
+
                     # Win / Loss split
                     st.markdown("#### 📊 Runs in Wins vs Losses")
                     wl_df = pd.DataFrame({
