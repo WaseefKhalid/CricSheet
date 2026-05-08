@@ -1451,63 +1451,117 @@ with tab5:
     )
 
 
-    # ── Top 10 Batting Innings ────────────────────────────────────────────────
-    st.divider()
-    st.subheader("🏏 Top 10 Batting Innings (All Time)")
+    # ── Pre-compute shared base data ─────────────────────────────────────────
     try:
-        top_inn_l = (
+        _sm3  = final_matches.set_index("match_id")
+        _smap = final_matches.set_index("match_id")["season"].to_dict() if "season" in final_matches.columns else {}
+
+        def _get_vs(mid, team):
+            try:
+                r = _sm3.loc[mid]
+                return r["team2"] if r["team1"]==team else r["team1"]
+            except: return "—"
+
+        # Team innings base
+        t_inn = (
             del_df.groupby(["match_id","innings","batting_team"])["total_runs"]
             .sum().reset_index().rename(columns={"total_runs":"runs","batting_team":"team"})
         )
-        top_inn_b = (
-            del_df[del_df["is_legal"]].groupby(["match_id","innings"])
-            .size().reset_index(name="balls")
-        )
-        top_inn_l = top_inn_l.merge(top_inn_b, on=["match_id","innings"], how="left")
-        top_inn_l["SR"] = (top_inn_l["runs"]/top_inn_l["balls"]*100).round(1).where(top_inn_l["balls"]>0,0)
-        _idx = final_matches.set_index("match_id")
-        def _opp(r):
-            try:
-                row = _idx.loc[r["match_id"]]
-                return row["team2"] if row["team1"]==r["team"] else row["team1"]
-            except: return "—"
-        top_inn_l["vs"] = top_inn_l.apply(_opp, axis=1)
-        top_inn_l["season"] = top_inn_l["match_id"].map(final_matches.set_index("match_id")["season"].to_dict()) if "season" in final_matches.columns else "—"
-        top_inn_l = top_inn_l.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
-        top_inn_l.index += 1
-        st.dataframe(
-            top_inn_l[["team","vs","season","innings","runs","balls","SR"]]
-            .rename(columns={"team":"Team","vs":"Vs","season":"Season","innings":"Inn","runs":"Runs","balls":"Balls"}),
-            use_container_width=True, height=380
-        )
-    except Exception as e:
-        st.warning(f"Could not compute top innings: {e}")
+        t_balls = del_df[del_df["is_legal"]].groupby(["match_id","innings"]).size().reset_index(name="balls")
+        t_inn = t_inn.merge(t_balls, on=["match_id","innings"], how="left")
+        t_inn["SR"]     = (t_inn["runs"]/t_inn["balls"]*100).round(1).where(t_inn["balls"]>0,0)
+        t_inn["vs"]     = t_inn.apply(lambda r: _get_vs(r["match_id"], r["team"]), axis=1)
+        t_inn["season"] = t_inn["match_id"].map(_smap)
 
-    # ── Top 10 Bowling Figures ─────────────────────────────────────────────────
-    st.divider()
-    st.subheader("🎳 Top 10 Bowling Figures (All Time)")
-    try:
-        wk = del_df["wicket_type"].notna() & (del_df["wicket_type"]!="") & (~del_df["wicket_type"].str.lower().isin(["run out","retired hurt","obstructing the field"]))
-        tf_w = del_df[wk].groupby(["match_id","innings","bowler"]).size().reset_index(name="wickets")
-        del_df["_rc"] = del_df["runs_off_bat"].fillna(0)+del_df["wides"].fillna(0)+del_df["noballs"].fillna(0)
-        tf_r = del_df.groupby(["match_id","innings","bowler"])["_rc"].sum().reset_index(name="runs_given")
-        tf_b = del_df[del_df["is_legal"]].groupby(["match_id","innings","bowler"]).size().reset_index(name="balls")
-        tf = tf_w.merge(tf_r, on=["match_id","innings","bowler"], how="left")
-        tf = tf.merge(tf_b, on=["match_id","innings","bowler"], how="left")
-        tf["overs"] = (tf["balls"]//6+(tf["balls"]%6)/10).round(1)
-        tf["figure"] = tf["wickets"].astype(str)+"/"+tf["runs_given"].astype(int).astype(str)
-        _bt = del_df.drop_duplicates(["match_id","bowler"]).set_index(["match_id","bowler"])["bowling_team"].to_dict()
-        tf["team"] = tf.apply(lambda r: _bt.get((r["match_id"],r["bowler"]),"—"), axis=1)
-        tf["season"] = tf["match_id"].map(final_matches.set_index("match_id")["season"].to_dict()) if "season" in final_matches.columns else "—"
-        tf = tf.sort_values(["wickets","runs_given"], ascending=[False,True]).head(10).reset_index(drop=True)
-        tf.index += 1
-        st.dataframe(
-            tf[["bowler","team","season","innings","figure","wickets","runs_given","overs"]]
-            .rename(columns={"bowler":"Bowler","team":"Team","season":"Season","innings":"Inn","figure":"Figure","wickets":"Wkts","runs_given":"Runs","overs":"Overs"}),
-            use_container_width=True, height=380
+        # Individual batting innings base
+        p_inn = (
+            del_df.groupby(["match_id","innings","striker","batting_team"])["runs_off_bat"]
+            .sum().reset_index().rename(columns={"runs_off_bat":"runs","striker":"player","batting_team":"team"})
         )
+        p_balls = del_df[del_df["wides"]==0].groupby(["match_id","innings","striker"]).size().reset_index(name="balls").rename(columns={"striker":"player"})
+        p_inn = p_inn.merge(p_balls, on=["match_id","innings","player"], how="left")
+        p_inn["SR"]     = (p_inn["runs"]/p_inn["balls"]*100).round(1).where(p_inn["balls"]>0,0)
+        p_inn["vs"]     = p_inn.apply(lambda r: _get_vs(r["match_id"], r["team"]), axis=1)
+        p_inn["season"] = p_inn["match_id"].map(_smap)
+        p_inn["4s"]     = del_df[del_df["runs_off_bat"]==4].groupby(["match_id","innings","striker"]).size().reindex(
+            p_inn.set_index(["match_id","innings","player"]).index).fillna(0).astype(int).values
+        p_inn["6s"]     = del_df[del_df["runs_off_bat"]==6].groupby(["match_id","innings","striker"]).size().reindex(
+            p_inn.set_index(["match_id","innings","player"]).index).fillna(0).astype(int).values
+
+        # Bowling figures base
+        wk = (del_df["wicket_type"].notna() & (del_df["wicket_type"]!="") &
+              (~del_df["wicket_type"].str.lower().isin(["run out","retired hurt","obstructing the field"])))
+        bf_w = del_df[wk].groupby(["match_id","innings","bowler"]).size().reset_index(name="wickets")
+        del_df["_rc"] = del_df["runs_off_bat"].fillna(0)+del_df["wides"].fillna(0)+del_df["noballs"].fillna(0)
+        bf_r = del_df.groupby(["match_id","innings","bowler"])["_rc"].sum().reset_index(name="runs_given")
+        bf_b = del_df[del_df["is_legal"]].groupby(["match_id","innings","bowler"]).size().reset_index(name="balls")
+        bf   = bf_w.merge(bf_r, on=["match_id","innings","bowler"], how="left")
+        bf   = bf.merge(bf_b, on=["match_id","innings","bowler"], how="left")
+        bf["overs"]     = (bf["balls"]//6+(bf["balls"]%6)/10).round(1)
+        bf["figure"]    = bf["wickets"].astype(str)+"/"+bf["runs_given"].astype(int).astype(str)
+        _btmap = del_df.drop_duplicates(["match_id","bowler"]).set_index(["match_id","bowler"])["bowling_team"].to_dict()
+        bf["team"]      = bf.apply(lambda r: _btmap.get((r["match_id"],r["bowler"]),"—"), axis=1)
+        bf["vs"]        = bf.apply(lambda r: _get_vs(r["match_id"], r["team"]), axis=1)
+        bf["season"]    = bf["match_id"].map(_smap)
+
     except Exception as e:
-        st.warning(f"Could not compute top bowling figures: {e}")
+        st.warning(f"Data preparation error: {e}")
+        t_inn = p_inn = bf = pd.DataFrame()
+
+    st.divider()
+    col_l, col_r = st.columns(2)
+
+    # ── Highest Team Scores ───────────────────────────────────────────────────
+    with col_l:
+        st.subheader("🏏 Top 10 Highest Team Scores")
+        if not t_inn.empty:
+            top_high = t_inn.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
+            top_high.index += 1
+            st.dataframe(
+                top_high[["team","vs","season","runs","balls","SR"]]
+                .rename(columns={"team":"Team","vs":"Vs","season":"Season","runs":"Score","balls":"Balls","SR":"SR"}),
+                use_container_width=True, height=380
+            )
+
+    # ── Lowest Team Scores ────────────────────────────────────────────────────
+    with col_r:
+        st.subheader("📉 Top 10 Lowest Team Scores")
+        if not t_inn.empty:
+            top_low = t_inn[t_inn["balls"] >= 60].sort_values("runs", ascending=True).head(10).reset_index(drop=True)
+            top_low.index += 1
+            st.dataframe(
+                top_low[["team","vs","season","runs","balls","SR"]]
+                .rename(columns={"team":"Team","vs":"Vs","season":"Season","runs":"Score","balls":"Balls","SR":"SR"}),
+                use_container_width=True, height=380
+            )
+
+    st.divider()
+    col_l2, col_r2 = st.columns(2)
+
+    # ── Top 10 Individual Innings ─────────────────────────────────────────────
+    with col_l2:
+        st.subheader("🌟 Top 10 Individual Innings")
+        if not p_inn.empty:
+            top_ind = p_inn.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
+            top_ind.index += 1
+            st.dataframe(
+                top_ind[["player","team","vs","season","runs","balls","SR"]]
+                .rename(columns={"player":"Player","team":"Team","vs":"Vs","season":"Season","runs":"Runs","balls":"Balls","SR":"SR"}),
+                use_container_width=True, height=380
+            )
+
+    # ── Top 10 Bowling Figures ────────────────────────────────────────────────
+    with col_r2:
+        st.subheader("🎳 Top 10 Bowling Figures")
+        if not bf.empty:
+            top_bf = bf.sort_values(["wickets","runs_given"], ascending=[False,True]).head(10).reset_index(drop=True)
+            top_bf.index += 1
+            st.dataframe(
+                top_bf[["bowler","team","vs","season","figure","wickets","runs_given","overs"]]
+                .rename(columns={"bowler":"Bowler","team":"Team","vs":"Vs","season":"Season",
+                                  "figure":"Figure","wickets":"Wkts","runs_given":"Runs","overs":"Overs"}),
+                use_container_width=True, height=380
+            )
 
 # TAB 6 — PLAYER PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
