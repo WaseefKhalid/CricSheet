@@ -1176,28 +1176,7 @@ with tab4:
         st.caption("Win records when batting first vs chasing")
         st.dataframe(bat_order, use_container_width=True, height=350)
 
-        if not bat_order.empty:
-            col1, col2 = st.columns(2)
-            with col1:
-                melt = bat_order[["team","win%_bat_first","win%_bat_second"]].melt(
-                    id_vars="team", var_name="innings", value_name="win_%"
-                )
-                melt["innings"] = melt["innings"].map({"win%_bat_first":"Bat First","win%_bat_second":"Bat Second"})
-                fig = px.bar(melt, x="team", y="win_%", color="innings", barmode="group",
-                             color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"}, text_auto=".1f")
-                fig.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
-                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                st.plotly_chart(fig, use_container_width=True, key=_next_key())
-            with col2:
-                melt2 = bat_order[["team","bat_first","bat_second"]].melt(
-                    id_vars="team", var_name="innings", value_name="matches"
-                )
-                melt2["innings"] = melt2["innings"].map({"bat_first":"Bat First","bat_second":"Bat Second"})
-                fig2 = px.bar(melt2, x="team", y="matches", color="innings", barmode="group",
-                              color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"}, text_auto=True)
-                fig2.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
-                                   paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                st.plotly_chart(fig2, use_container_width=True, key=_next_key())
+    
 
         st.subheader("🪙 Toss Analysis")
         toss = _cache["toss_stats"]
@@ -1272,43 +1251,6 @@ with tab5:
     c5.metric("Highest 1st Inn",     f"{int(inn1['runs'].max())}"  if not inn1.empty else "—")
     c6.metric("Lowest 1st Inn",      f"{int(inn1['runs'].min())}"  if not inn1.empty else "—")
 
-    # ── 1st inn score distribution ────────────────────────────────────────────
-    st.divider()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**📈 1st Innings Score Distribution**")
-        fig_dist = px.histogram(
-            inn1, x="runs", nbins=30,
-            color_discrete_sequence=["#1DB954"],
-            labels={"runs":"Score","count":"Matches"},
-        )
-        fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)",
-                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_dist, use_container_width=True, key=_next_key())
-    with col2:
-        st.markdown("**📊 Win % by 1st Innings Score Range**")
-        inn1c = inn1.copy()
-        inn1c["score_band"] = pd.cut(inn1c["runs"],
-            bins=[0,120,140,160,180,200,999],
-            labels=["<120","120-140","140-160","160-180","180-200","200+"])
-        win_by_band = (
-            inn1c.groupby("score_band", observed=True)
-            .agg(matches=("match_id","count"), wins=("won","sum"))
-            .reset_index()
-        )
-        win_by_band["win_%"] = (win_by_band["wins"]/win_by_band["matches"]*100).round(1)
-        fig_band = px.bar(win_by_band, x="score_band", y="win_%",
-                          color="win_%",
-                          color_continuous_scale=["#e63946","#f59e0b","#1DB954"],
-                          text="win_%",
-                          labels={"score_band":"Score Range","win_%":"Win %"})
-        fig_band.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                               paper_bgcolor="rgba(0,0,0,0)", font_color="white",
-                               coloraxis_showscale=False)
-        fig_band.update_traces(textposition="outside")
-        st.plotly_chart(fig_band, use_container_width=True, key=_next_key())
-
-    # ── Phase analysis ────────────────────────────────────────────────────────
     st.divider()
     st.subheader("🎯 Phase-wise Analysis (All Matches)")
 
@@ -1432,25 +1374,6 @@ with tab5:
     st.subheader("🪙 Toss Impact & Venue Trends")
 
     col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**Toss Decision → Win Rate**")
-        if "toss_decision" in final_matches.columns and "winner" in final_matches.columns:
-            toss_win = final_matches.copy()
-            toss_win["toss_won_match"] = toss_win["toss_winner"] == toss_win["winner"]
-            td = toss_win.groupby("toss_decision").agg(
-                matches=("match_id","count"),
-                wins=("toss_won_match","sum")
-            ).reset_index()
-            td["win_%"] = (td["wins"]/td["matches"]*100).round(1)
-            fig_td = px.bar(td, x="toss_decision", y="win_%",
-                            color="toss_decision",
-                            color_discrete_map={"bat":"#1DB954","field":"#00b4d8"},
-                            text="win_%", title="Win % after Toss Decision")
-            fig_td.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-            fig_td.update_traces(textposition="outside")
-            st.plotly_chart(fig_td, use_container_width=True, key=_next_key())
-
     with col2:
         st.markdown("**Avg 1st Innings Score by Venue**")
         if "venue" in del_df.columns or "venue" in inn1.columns:
@@ -1526,6 +1449,65 @@ with tab5:
         key="dl_8",
         mime="text/csv",
     )
+
+
+    # ── Top 10 Batting Innings ────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🏏 Top 10 Batting Innings (All Time)")
+    try:
+        top_inn_l = (
+            del_df.groupby(["match_id","innings","batting_team"])["total_runs"]
+            .sum().reset_index().rename(columns={"total_runs":"runs","batting_team":"team"})
+        )
+        top_inn_b = (
+            del_df[del_df["is_legal"]].groupby(["match_id","innings"])
+            .size().reset_index(name="balls")
+        )
+        top_inn_l = top_inn_l.merge(top_inn_b, on=["match_id","innings"], how="left")
+        top_inn_l["SR"] = (top_inn_l["runs"]/top_inn_l["balls"]*100).round(1).where(top_inn_l["balls"]>0,0)
+        _idx = final_matches.set_index("match_id")
+        def _opp(r):
+            try:
+                row = _idx.loc[r["match_id"]]
+                return row["team2"] if row["team1"]==r["team"] else row["team1"]
+            except: return "—"
+        top_inn_l["vs"] = top_inn_l.apply(_opp, axis=1)
+        top_inn_l["season"] = top_inn_l["match_id"].map(final_matches.set_index("match_id")["season"].to_dict()) if "season" in final_matches.columns else "—"
+        top_inn_l = top_inn_l.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
+        top_inn_l.index += 1
+        st.dataframe(
+            top_inn_l[["team","vs","season","innings","runs","balls","SR"]]
+            .rename(columns={"team":"Team","vs":"Vs","season":"Season","innings":"Inn","runs":"Runs","balls":"Balls"}),
+            use_container_width=True, height=380
+        )
+    except Exception as e:
+        st.warning(f"Could not compute top innings: {e}")
+
+    # ── Top 10 Bowling Figures ─────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🎳 Top 10 Bowling Figures (All Time)")
+    try:
+        wk = del_df["wicket_type"].notna() & (del_df["wicket_type"]!="") & (~del_df["wicket_type"].str.lower().isin(["run out","retired hurt","obstructing the field"]))
+        tf_w = del_df[wk].groupby(["match_id","innings","bowler"]).size().reset_index(name="wickets")
+        del_df["_rc"] = del_df["runs_off_bat"].fillna(0)+del_df["wides"].fillna(0)+del_df["noballs"].fillna(0)
+        tf_r = del_df.groupby(["match_id","innings","bowler"])["_rc"].sum().reset_index(name="runs_given")
+        tf_b = del_df[del_df["is_legal"]].groupby(["match_id","innings","bowler"]).size().reset_index(name="balls")
+        tf = tf_w.merge(tf_r, on=["match_id","innings","bowler"], how="left")
+        tf = tf.merge(tf_b, on=["match_id","innings","bowler"], how="left")
+        tf["overs"] = (tf["balls"]//6+(tf["balls"]%6)/10).round(1)
+        tf["figure"] = tf["wickets"].astype(str)+"/"+tf["runs_given"].astype(int).astype(str)
+        _bt = del_df.drop_duplicates(["match_id","bowler"]).set_index(["match_id","bowler"])["bowling_team"].to_dict()
+        tf["team"] = tf.apply(lambda r: _bt.get((r["match_id"],r["bowler"]),"—"), axis=1)
+        tf["season"] = tf["match_id"].map(final_matches.set_index("match_id")["season"].to_dict()) if "season" in final_matches.columns else "—"
+        tf = tf.sort_values(["wickets","runs_given"], ascending=[False,True]).head(10).reset_index(drop=True)
+        tf.index += 1
+        st.dataframe(
+            tf[["bowler","team","season","innings","figure","wickets","runs_given","overs"]]
+            .rename(columns={"bowler":"Bowler","team":"Team","season":"Season","innings":"Inn","figure":"Figure","wickets":"Wkts","runs_given":"Runs","overs":"Overs"}),
+            use_container_width=True, height=380
+        )
+    except Exception as e:
+        st.warning(f"Could not compute top bowling figures: {e}")
 
 # TAB 6 — PLAYER PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
