@@ -639,20 +639,20 @@ with tab3:
     pom_counts.columns = ["player", "awards"]
     pom_counts.index   = range(1, len(pom_counts) + 1)
 
-    col1, col2 = st.columns([2, 3])
-    with col1:
-        st.dataframe(pom_counts, use_container_width=True, height=400)
-    with col2:
-        fig_lb = px.bar(
-            pom_counts.head(15), x="player", y="awards",
-            color="awards", color_continuous_scale=["#1a3550","#1DB954"],
-            text="awards", title="Top 15 Player of Match Winners"
-        )
-        fig_lb.update_layout(showlegend=False, xaxis_tickangle=-35,
-                             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                             font_color="white", coloraxis_showscale=False)
-        fig_lb.update_traces(textposition="outside")
-        st.plotly_chart(fig_lb, use_container_width=True, key=_next_key())
+    # Enrich pom_counts with matches played and award rate
+    total_matches_per_player = (
+        final_deliveries.groupby("striker")["match_id"].nunique()
+        .reset_index().rename(columns={"striker":"player","match_id":"matches_played"})
+    )
+    pom_table = pom_counts.merge(total_matches_per_player, on="player", how="left")
+    pom_table["matches_played"] = pom_table["matches_played"].fillna(0).astype(int)
+    pom_table["award_per_match"] = (pom_table["matches_played"] / pom_table["awards"].replace(0,1)).round(1)
+    pom_table = pom_table.rename(columns={
+        "player":"Player","awards":"Awards",
+        "matches_played":"Matches","award_per_match":"Matches/Award"
+    })
+    pom_table.index = range(1, len(pom_table)+1)
+    st.dataframe(pom_table, use_container_width=True, height=450)
 
     # ── 2. Player drill-down ──────────────────────────────────────────────────
     st.subheader("🔍 Player Deep Dive")
@@ -1371,16 +1371,7 @@ with tab5:
                               paper_bgcolor="rgba(0,0,0,0)", font_color="white")
         fig_rr.update_traces(textposition="outside")
         st.plotly_chart(fig_rr, use_container_width=True, key=_next_key())
-    with col4:
-        st.markdown("**⚡ Balls per Wicket by Phase**")
-        fig_wb = px.bar(phase_agg, x="phase", y="balls_per_wicket",
-                        color="phase",
-                        color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="balls_per_wicket")
-        fig_wb.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig_wb.update_traces(textposition="outside")
-        st.plotly_chart(fig_wb, use_container_width=True, key=_next_key())
+
 
     st.caption("All values are **per innings** — PP avg ~54 runs is correct for T20")
     # Phase table
@@ -1535,228 +1526,6 @@ with tab5:
         key="dl_8",
         mime="text/csv",
     )
-
-# TAB 5 — LEAGUE ANALYSIS
-# ─────────────────────────────────────────────────────────────────────────────
-with tab5:
-    import plotly.express as px
-    st.subheader("📊 League Analysis")
-    st.caption("Aggregated league-wide trends across all filtered matches")
-
-    del_df = final_deliveries.copy().reset_index(drop=True)
-    del_df["ball_num"] = pd.to_numeric(del_df["ball"], errors="coerce")
-    del_df["over_num"] = del_df["ball_num"].apply(
-        lambda x: int(str(x).split(".")[0]) + 1 if pd.notna(x) else 0
-    )
-    del_df["phase"] = pd.cut(
-        del_df["over_num"], bins=[0,6,15,20,999],
-        labels=["Powerplay (1-6)","Middle (7-15)","Death (16-20)","Super (20+)"], right=True
-    )
-    del_df["total_runs"] = del_df["runs_off_bat"].fillna(0) + del_df["extras"].fillna(0)
-    del_df["is_wicket"]  = del_df["wicket_type"].notna() & (del_df["wicket_type"] != "")
-    del_df["is_legal"]   = (del_df["wides"] == 0) & (del_df["noballs"] == 0)
-
-    inn_agg = (
-        del_df.groupby(["match_id","innings"])
-        .agg(runs=("total_runs","sum"), wickets=("is_wicket","sum"), balls=("is_legal","sum"))
-        .reset_index()
-    )
-    inn_agg = inn_agg.merge(final_matches[["match_id","winner","team1","team2"]], on="match_id", how="left")
-    bat_team = del_df.groupby(["match_id","innings"])["batting_team"].first().reset_index()
-    inn_agg  = inn_agg.merge(bat_team, on=["match_id","innings"], how="left")
-    inn_agg["won"] = inn_agg["batting_team"] == inn_agg["winner"]
-    inn1 = inn_agg[pd.to_numeric(inn_agg["innings"], errors="coerce") == 1]
-    inn2 = inn_agg[pd.to_numeric(inn_agg["innings"], errors="coerce") == 2]
-
-    # KPIs
-    st.subheader("🏏 Innings Averages")
-    c1,c2,c3,c4,c5,c6 = st.columns(6)
-    c1.metric("Avg 1st Inn Score",  f"{inn1['runs'].mean():.1f}"  if not inn1.empty else "—")
-    c2.metric("Avg 1st Inn (Wins)", f"{inn1[inn1['won']]['runs'].mean():.1f}" if not inn1[inn1['won']].empty else "—")
-    c3.metric("Avg 2nd Inn Score",  f"{inn2['runs'].mean():.1f}"  if not inn2.empty else "—")
-    c4.metric("Avg 2nd Inn (Wins)", f"{inn2[inn2['won']]['runs'].mean():.1f}" if not inn2[inn2['won']].empty else "—")
-    c5.metric("Highest 1st Inn",    f"{int(inn1['runs'].max())}"  if not inn1.empty else "—")
-    c6.metric("Lowest 1st Inn",     f"{int(inn1['runs'].min())}"  if not inn1.empty else "—")
-
-    # Score distribution + win % by band
-    st.divider()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**📈 1st Innings Score Distribution**")
-        fig_dist = px.histogram(inn1, x="runs", nbins=30, color_discrete_sequence=["#1DB954"])
-        fig_dist.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_dist, use_container_width=True, key=_next_key())
-    with col2:
-        st.markdown("**📊 Win % by 1st Innings Score Range**")
-        inn1c = inn1.copy()
-        inn1c["score_band"] = pd.cut(inn1c["runs"], bins=[0,120,140,160,180,200,999],
-            labels=["<120","120-140","140-160","160-180","180-200","200+"])
-        wb = inn1c.groupby("score_band", observed=True).agg(
-            matches=("match_id","count"), wins=("won","sum")).reset_index()
-        wb["win_%"] = (wb["wins"]/wb["matches"]*100).round(1)
-        fig_band = px.bar(wb, x="score_band", y="win_%", color="win_%",
-                          color_continuous_scale=["#e63946","#f59e0b","#1DB954"], text="win_%")
-        fig_band.update_layout(showlegend=False, coloraxis_showscale=False,
-                               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig_band.update_traces(textposition="outside")
-        st.plotly_chart(fig_band, use_container_width=True, key=_next_key())
-
-    # Phase analysis
-    st.divider()
-    st.subheader("🎯 Phase-wise Analysis")
-    phase_agg = (
-        del_df[del_df["phase"].notna() & (del_df["phase"] != "Super (20+)")]
-        .groupby("phase", observed=True)
-        .agg(total_runs=("total_runs","sum"), total_balls=("is_legal","sum"),
-             total_wkts=("is_wicket","sum"), matches=("match_id","nunique"))
-        .reset_index()
-    )
-    # Count innings (not matches) for per-innings averages
-    # Each match has 2 innings so we need innings count per phase
-    phase_innings = (
-        del_df[del_df["phase"].notna() & (del_df["phase"] != "Super (20+)")]
-        .groupby(["phase","match_id","innings"], observed=True)
-        .size()
-        .reset_index(name="balls_count")
-        .groupby("phase", observed=True)
-        .size()
-        .reset_index(name="innings_count")
-    )
-    phase_agg = phase_agg.merge(phase_innings, on="phase", how="left")
-    phase_agg["innings_count"] = phase_agg["innings_count"].fillna(1)
-
-    # Per INNINGS averages (not per match)
-    phase_agg["avg_runs_per_inn"]  = (phase_agg["total_runs"] / phase_agg["innings_count"]).round(1)
-    phase_agg["avg_wkts_per_inn"]  = (phase_agg["total_wkts"] / phase_agg["innings_count"]).round(2)
-    phase_agg["run_rate"]          = (phase_agg["total_runs"] / phase_agg["total_balls"] * 6).round(2).where(phase_agg["total_balls"]>0, 0)
-    phase_agg["balls_per_wicket"]  = (phase_agg["total_balls"] / phase_agg["total_wkts"]).round(1).where(phase_agg["total_wkts"]>0, 0)
-
-    col1,col2,col3,col4 = st.columns(4)
-    COLORS3 = ["#1DB954","#00b4d8","#e63946"]
-    for col, metric, title in [
-        (col1,"avg_runs_per_inn","Avg Runs/Innings"),
-        (col2,"run_rate","Run Rate"),
-        (col3,"avg_wkts_per_inn","Avg Wickets/Innings"),
-        (col4,"balls_per_wicket","Balls/Wicket"),
-    ]:
-        with col:
-            fig = px.bar(phase_agg, x="phase", y=metric, color="phase",
-                         color_discrete_sequence=COLORS3, text=metric, title=title)
-            fig.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-            fig.update_traces(textposition="outside")
-            st.plotly_chart(fig, use_container_width=True, key=_next_key())
-
-    st.caption("All averages are **per innings** (not per match)")
-    st.dataframe(
-        phase_agg[["phase","avg_runs_per_inn","run_rate","avg_wkts_per_inn","balls_per_wicket"]]
-        .rename(columns={
-            "phase":             "Phase",
-            "avg_runs_per_inn":  "Avg Runs/Inn",
-            "run_rate":          "Run Rate",
-            "avg_wkts_per_inn":  "Avg Wickets/Inn",
-            "balls_per_wicket":  "Balls/Wicket",
-        }),
-        use_container_width=True, hide_index=True
-    )
-
-    # Over-by-over
-    st.divider()
-    st.subheader("📉 Over-by-Over Trends")
-    ov_agg = (
-        del_df[del_df["over_num"].between(1,20)]
-        .groupby("over_num")
-        .agg(runs=("total_runs","sum"), balls=("is_legal","sum"),
-             wkts=("is_wicket","sum"), mc=("match_id","nunique"))
-        .reset_index()
-    )
-    ov_agg["run_rate"] = (ov_agg["runs"]/ov_agg["balls"]*6).round(2).where(ov_agg["balls"]>0,0)
-    ov_agg["avg_wkts"] = (ov_agg["wkts"]/ov_agg["mc"]).round(3)
-    col1, col2 = st.columns(2)
-    with col1:
-        fig_or = px.line(ov_agg, x="over_num", y="run_rate", markers=True,
-                         color_discrete_sequence=["#1DB954"], title="Run Rate per Over")
-        fig_or.add_vline(x=6.5,  line_dash="dash", line_color="#8b949e", annotation_text="PP end")
-        fig_or.add_vline(x=15.5, line_dash="dash", line_color="#8b949e", annotation_text="Death start")
-        fig_or.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_or, use_container_width=True, key=_next_key())
-    with col2:
-        fig_ow = px.bar(ov_agg, x="over_num", y="avg_wkts", color="avg_wkts",
-                        color_continuous_scale=["#1a3550","#e63946"], title="Avg Wickets per Over")
-        fig_ow.add_vline(x=6.5,  line_dash="dash", line_color="#8b949e")
-        fig_ow.add_vline(x=15.5, line_dash="dash", line_color="#8b949e")
-        fig_ow.update_layout(showlegend=False, coloraxis_showscale=False,
-                             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_ow, use_container_width=True, key=_next_key())
-
-    # Toss + Venue
-    st.divider()
-    st.subheader("🪙 Toss & Venue Analysis")
-    col1, col2 = st.columns(2)
-    with col1:
-        if "toss_decision" in final_matches.columns and "winner" in final_matches.columns:
-            tw = final_matches.copy()
-            tw["toss_won_match"] = tw["toss_winner"] == tw["winner"]
-            td = tw.groupby("toss_decision").agg(matches=("match_id","count"),wins=("toss_won_match","sum")).reset_index()
-            td["win_%"] = (td["wins"]/td["matches"]*100).round(1)
-            fig_td = px.bar(td, x="toss_decision", y="win_%", color="toss_decision",
-                            color_discrete_map={"bat":"#1DB954","field":"#00b4d8"}, text="win_%",
-                            title="Win % after Toss Decision")
-            fig_td.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-            fig_td.update_traces(textposition="outside")
-            st.plotly_chart(fig_td, use_container_width=True, key=_next_key())
-    with col2:
-        inn1v = inn1.merge(final_matches[["match_id","venue"]].drop_duplicates(), on="match_id", how="left")
-        va = inn1v.groupby("venue")["runs"].agg(avg="mean",count="count").reset_index()
-        va = va[va["count"] >= 3].sort_values("avg", ascending=False)
-        va["avg"] = va["avg"].round(1)
-        fig_va = px.bar(va, x="venue", y="avg", color="avg",
-                        color_continuous_scale=["#1a3550","#f59e0b"], text="avg",
-                        title="Avg 1st Inn Score by Venue (min 3 matches)")
-        fig_va.update_layout(showlegend=False, xaxis_tickangle=-35, coloraxis_showscale=False,
-                              plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig_va.update_traces(textposition="outside")
-        st.plotly_chart(fig_va, use_container_width=True, key=_next_key())
-
-    # Season trends
-    st.divider()
-    st.subheader("📅 Season-by-Season Trends")
-    if "season" in final_matches.columns:
-        _season_map = final_matches.set_index("match_id")["season"].to_dict()
-        sd = del_df.copy()
-        sd["_season"] = sd["match_id"].map(_season_map)
-        sd = sd[sd["_season"].notna()]
-        sa = sd.groupby("_season").agg(
-            runs=("total_runs","sum"), wickets=("is_wicket","sum"),
-            matches=("match_id","nunique"), balls=("is_legal","sum")
-        ).reset_index().rename(columns={"_season":"season"}).sort_values("season")
-        inn_per_season = (
-            sd.groupby(["_season","match_id","innings"])
-            .size().reset_index(name="b")
-            .groupby("_season").size().reset_index(name="inn_count")
-            .rename(columns={"_season":"season"})
-        )
-        sa = sa.merge(inn_per_season, on="season", how="left")
-        sa["inn_count"] = sa["inn_count"].fillna(sa["matches"] * 2)
-        sa["avg_score"] = (sa["runs"]    / sa["inn_count"]).round(1)
-        sa["run_rate"]  = (sa["runs"]    / sa["balls"] * 6).round(2)
-        sa["avg_wkts"]  = (sa["wickets"] / sa["inn_count"]).round(2)
-        col1,col2,col3 = st.columns(3)
-        for col, y, color, title in [
-            (col1,"avg_score","#1DB954","Avg Innings Score"),
-            (col2,"run_rate","#00b4d8","Run Rate"),
-            (col3,"avg_wkts","#e63946","Avg Wickets/Inn"),
-        ]:
-            with col:
-                fig = px.line(sa, x="season", y=y, markers=True,
-                              color_discrete_sequence=[color], title=title)
-                fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  font_color="white", xaxis_tickangle=-45)
-                st.plotly_chart(fig, use_container_width=True, key=_next_key())
-
-    st.download_button("⬇️ Download Phase CSV", phase_agg.to_csv(index=False), key="dl_9",
-                       file_name="league_analysis.csv", mime="text/csv")
 
 # TAB 6 — PLAYER PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
