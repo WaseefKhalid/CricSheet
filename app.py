@@ -216,9 +216,7 @@ if show_picker:
                                 font-weight:600;margin-bottom:0.4rem;">
                         {n_matches} matches
                     </div>
-                    <div style="color:#8b949e;font-size:0.78rem;margin-top:0.3rem;">
-                        🕒 {updated}
-                    </div>
+
                 </div>
                 """, unsafe_allow_html=True)
                 if st.button(f"▶ Load {league_name}", key=f"load_{i}", use_container_width=True):
