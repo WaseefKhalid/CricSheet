@@ -1471,7 +1471,15 @@ with tab5:
         t_inn = t_inn.merge(t_balls, on=["match_id","innings"], how="left")
         t_inn["SR"]     = (t_inn["runs"]/t_inn["balls"]*100).round(1).where(t_inn["balls"]>0,0)
         t_inn["vs"]     = t_inn.apply(lambda r: _get_vs(r["match_id"], r["team"]), axis=1)
+        _venue_map = final_matches.set_index("match_id")["venue"].to_dict() if "venue" in final_matches.columns else {}
+        _date_map  = final_matches.set_index("match_id")["date"].to_dict()  if "date"  in final_matches.columns else {}
+        t_inn["venue"] = t_inn["match_id"].map(_venue_map)
+        t_inn["date"]  = pd.to_datetime(t_inn["match_id"].map(_date_map), errors="coerce").dt.strftime("%d %b %Y")
         t_inn["season"] = t_inn["match_id"].map(_smap)
+        _venue_map = final_matches.set_index("match_id")["venue"].to_dict() if "venue" in final_matches.columns else {}
+        _date_map  = final_matches.set_index("match_id")["date"].to_dict()  if "date"  in final_matches.columns else {}
+        t_inn["venue"] = t_inn["match_id"].map(_venue_map)
+        t_inn["date"]  = pd.to_datetime(t_inn["match_id"].map(_date_map), errors="coerce").dt.strftime("%d %b %Y")
 
         # Individual batting innings base
         p_inn = (
@@ -1483,6 +1491,10 @@ with tab5:
         p_inn["SR"]     = (p_inn["runs"]/p_inn["balls"]*100).round(1).where(p_inn["balls"]>0,0)
         p_inn["vs"]     = p_inn.apply(lambda r: _get_vs(r["match_id"], r["team"]), axis=1)
         p_inn["season"] = p_inn["match_id"].map(_smap)
+        p_inn["venue"]  = p_inn["match_id"].map(_venue_map)
+        p_inn["date"]   = pd.to_datetime(p_inn["match_id"].map(_date_map), errors="coerce").dt.strftime("%d %b %Y")
+        p_inn["venue"]  = p_inn["match_id"].map(_venue_map)
+        p_inn["date"]   = pd.to_datetime(p_inn["match_id"].map(_date_map), errors="coerce").dt.strftime("%d %b %Y")
         p_inn["4s"]     = del_df[del_df["runs_off_bat"]==4].groupby(["match_id","innings","striker"]).size().reindex(
             p_inn.set_index(["match_id","innings","player"]).index).fillna(0).astype(int).values
         p_inn["6s"]     = del_df[del_df["runs_off_bat"]==6].groupby(["match_id","innings","striker"]).size().reindex(
@@ -1503,6 +1515,10 @@ with tab5:
         bf["team"]      = bf.apply(lambda r: _btmap.get((r["match_id"],r["bowler"]),"—"), axis=1)
         bf["vs"]        = bf.apply(lambda r: _get_vs(r["match_id"], r["team"]), axis=1)
         bf["season"]    = bf["match_id"].map(_smap)
+        bf["venue"]     = bf["match_id"].map(_venue_map)
+        bf["date"]      = pd.to_datetime(bf["match_id"].map(_date_map), errors="coerce").dt.strftime("%d %b %Y")
+        bf["venue"]     = bf["match_id"].map(_venue_map)
+        bf["date"]      = pd.to_datetime(bf["match_id"].map(_date_map), errors="coerce").dt.strftime("%d %b %Y")
 
     except Exception as e:
         st.warning(f"Data preparation error: {e}")
@@ -1518,8 +1534,8 @@ with tab5:
             top_high = t_inn.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
             top_high.index += 1
             st.dataframe(
-                top_high[["team","vs","season","runs","balls","SR"]]
-                .rename(columns={"team":"Team","vs":"Vs","season":"Season","runs":"Score","balls":"Balls","SR":"SR"}),
+                top_high[["team","vs","season","date","venue","runs","balls","SR"]]
+                .rename(columns={"team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Score","balls":"Balls","SR":"SR"}),
                 use_container_width=True, height=380
             )
 
@@ -1530,8 +1546,8 @@ with tab5:
             top_low = t_inn[t_inn["balls"] >= 60].sort_values("runs", ascending=True).head(10).reset_index(drop=True)
             top_low.index += 1
             st.dataframe(
-                top_low[["team","vs","season","runs","balls","SR"]]
-                .rename(columns={"team":"Team","vs":"Vs","season":"Season","runs":"Score","balls":"Balls","SR":"SR"}),
+                top_low[["team","vs","season","date","venue","runs","balls","SR"]]
+                .rename(columns={"team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Score","balls":"Balls","SR":"SR"}),
                 use_container_width=True, height=380
             )
 
@@ -1545,8 +1561,8 @@ with tab5:
             top_ind = p_inn.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
             top_ind.index += 1
             st.dataframe(
-                top_ind[["player","team","vs","season","runs","balls","SR"]]
-                .rename(columns={"player":"Player","team":"Team","vs":"Vs","season":"Season","runs":"Runs","balls":"Balls","SR":"SR"}),
+                top_ind[["player","team","vs","season","date","venue","runs","balls","SR"]]
+                .rename(columns={"player":"Player","team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Runs","balls":"Balls","SR":"SR"}),
                 use_container_width=True, height=380
             )
 
@@ -1557,9 +1573,9 @@ with tab5:
             top_bf = bf.sort_values(["wickets","runs_given"], ascending=[False,True]).head(10).reset_index(drop=True)
             top_bf.index += 1
             st.dataframe(
-                top_bf[["bowler","team","vs","season","figure","wickets","runs_given","overs"]]
+                top_bf[["bowler","team","vs","season","date","venue","figure","wickets","runs_given","overs"]]
                 .rename(columns={"bowler":"Bowler","team":"Team","vs":"Vs","season":"Season",
-                                  "figure":"Figure","wickets":"Wkts","runs_given":"Runs","overs":"Overs"}),
+                                  "date":"Date","venue":"Venue","figure":"Figure","wickets":"Wkts","runs_given":"Runs","overs":"Overs"}),
                 use_container_width=True, height=380
             )
 
