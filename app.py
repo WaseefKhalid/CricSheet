@@ -1247,7 +1247,8 @@ with tab5:
     c3.metric("Avg 2nd Inn Score",   f"{inn2['runs'].mean():.1f}"  if not inn2.empty else "—")
     c4.metric("Avg 2nd Inn (Wins)",  f"{inn2[inn2['won']]['runs'].mean():.1f}" if not inn2[inn2["won"]].empty else "—")
     c5.metric("Highest 1st Inn",     f"{int(inn1['runs'].max())}"  if not inn1.empty else "—")
-    c6.metric("Lowest 1st Inn",      f"{int(inn1['runs'].min())}"  if not inn1.empty else "—")
+  
+
 
     st.divider()
     st.subheader("🎯 Phase-wise Analysis (All Matches)")
@@ -1538,19 +1539,7 @@ with tab5:
             )
 
     # ── Lowest Team Scores ────────────────────────────────────────────────────
-    with col_r:
-        st.subheader("📉 Top 10 Lowest Team Scores")
-        if not t_inn.empty:
-            top_low = t_inn[t_inn["balls"] >= 60].sort_values("runs", ascending=True).head(10).reset_index(drop=True)
-            top_low.index += 1
-            st.dataframe(
-                top_low[["team","vs","season","date","venue","runs","balls","SR"]]
-                .rename(columns={"team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Score","balls":"Balls","SR":"SR"}),
-                use_container_width=True, height=380
-            )
-
-    st.divider()
-    col_l2, col_r2 = st.columns(2)
+   
 
     # ── Top 10 Individual Innings ─────────────────────────────────────────────
     with col_l2:
