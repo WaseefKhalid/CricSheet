@@ -1542,6 +1542,7 @@ with tab5:
    
 
     # ── Top 10 Individual Innings ─────────────────────────────────────────────
+    col_l2, col_r2 = st.columns(2)
     with col_l2:
         st.subheader("🌟 Top 10 Individual Innings")
         if not p_inn.empty:
