@@ -391,8 +391,21 @@ else:
 
 # Precompute valid player sets once — used by all tabs below
 # These are the team's OWN players only (batting_team = team → only their batters)
-valid_bat_players  = set(bat_deliveries["striker"].dropna().unique()) if eff_batting_teams else None
-valid_bowl_players = set(bowl_deliveries["bowler"].dropna().unique()) if eff_bowling_teams else None
+# Always filter players by current match selection (season/event/team filters)
+# This ensures season filter affects batting/bowling stats
+_filtered_strikers = set(final_deliveries["striker"].dropna().unique())
+_filtered_bowlers  = set(final_deliveries["bowler"].dropna().unique())
+
+# Team filter on top of season filter
+if eff_batting_teams:
+    valid_bat_players = set(bat_deliveries["striker"].dropna().unique())
+else:
+    valid_bat_players = _filtered_strikers  # season-filtered players
+
+if eff_bowling_teams:
+    valid_bowl_players = set(bowl_deliveries["bowler"].dropna().unique())
+else:
+    valid_bowl_players = _filtered_bowlers  # season-filtered players
 
 # For player profile tab: union of both to get all squad members
 valid_team_players = None
@@ -488,15 +501,13 @@ with tab1:
 
     if use_pos_filter and selected_positions:
         # MUST recompute from position-filtered deliveries
-        # Using cache here would show total career runs, not runs at that position
         batting_base = get_batting_stats(bat_del.reset_index(drop=True), min_innings=1)
     else:
-        # No position filter — use precomputed cache (fast)
-        batting_base = _cache["batting_all"].copy()
+        # Filter cache by current season/team selection
+        batting_base = get_batting_stats(bat_deliveries.reset_index(drop=True), min_innings=1)
 
-    # Apply batting team filter
-    if valid_bat_players is not None:
-        batting_base = batting_base[batting_base["player"].isin(valid_bat_players)]
+    # Apply player filter (already season+team filtered via bat_deliveries)
+    batting_base = batting_base[batting_base["player"].isin(valid_bat_players)]
 
     batting = batting_base[batting_base["innings"] >= min_innings].copy()
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
@@ -568,17 +579,14 @@ with tab2:
         bowl_del = bowl_del[bowl_del["over_num"].isin(selected_overs)]
 
     if use_over_filter and selected_overs:
-        # MUST recompute from over-filtered deliveries
-        # Cache has career totals — need stats only within selected overs
+        # Recompute from over-filtered deliveries
         bowling_base = get_bowling_stats(bowl_del.reset_index(drop=True), min_overs=1)
-        # Apply team filter on top
-        if valid_bowl_players is not None:
-            bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
     else:
-        # No over filter — use precomputed cache (fast)
-        bowling_base = _cache["bowling_all"].copy()
-        if valid_bowl_players is not None:
-            bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
+        # Recompute from season+team filtered deliveries
+        bowling_base = get_bowling_stats(bowl_deliveries.reset_index(drop=True), min_overs=1)
+
+    # Apply player filter (already season+team filtered)
+    bowling_base = bowling_base[bowling_base["player"].isin(valid_bowl_players)]
 
     bowling = bowling_base[bowling_base["overs"] >= min_overs].copy()
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
@@ -1247,8 +1255,7 @@ with tab5:
     c3.metric("Avg 2nd Inn Score",   f"{inn2['runs'].mean():.1f}"  if not inn2.empty else "—")
     c4.metric("Avg 2nd Inn (Wins)",  f"{inn2[inn2['won']]['runs'].mean():.1f}" if not inn2[inn2["won"]].empty else "—")
     c5.metric("Highest 1st Inn",     f"{int(inn1['runs'].max())}"  if not inn1.empty else "—")
-  
-
+    c6.metric("Lowest 1st Inn",      f"{int(inn1['runs'].min())}"  if not inn1.empty else "—")
 
     st.divider()
     st.subheader("🎯 Phase-wise Analysis (All Matches)")
@@ -1539,10 +1546,21 @@ with tab5:
             )
 
     # ── Lowest Team Scores ────────────────────────────────────────────────────
-   
+    with col_r:
+        st.subheader("📉 Top 10 Lowest Team Scores")
+        if not t_inn.empty:
+            top_low = t_inn[t_inn["balls"] >= 60].sort_values("runs", ascending=True).head(10).reset_index(drop=True)
+            top_low.index += 1
+            st.dataframe(
+                top_low[["team","vs","season","date","venue","runs","balls","SR"]]
+                .rename(columns={"team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Score","balls":"Balls","SR":"SR"}),
+                use_container_width=True, height=380
+            )
+
+    st.divider()
+    col_l2, col_r2 = st.columns(2)
 
     # ── Top 10 Individual Innings ─────────────────────────────────────────────
-    col_l2, col_r2 = st.columns(2)
     with col_l2:
         st.subheader("🌟 Top 10 Individual Innings")
         if not p_inn.empty:
