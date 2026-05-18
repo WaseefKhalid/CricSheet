@@ -643,6 +643,19 @@ with tab3:
         .reset_index()
     )
     pom_counts.columns = ["player", "awards"]
+    # Matches played — from filtered deliveries (respects season)
+    total_matches_pp = (
+        final_deliveries.groupby("striker")["match_id"].nunique()
+        .reset_index().rename(columns={"striker":"player","match_id":"matches_played"})
+    )
+    pom_table = pom_counts.merge(total_matches_pp, on="player", how="left")
+    pom_table["matches_played"]  = pom_table["matches_played"].fillna(0).astype(int)
+    pom_table["matches_per_award"] = (pom_table["matches_played"] / pom_table["awards"].replace(0,1)).round(1)
+    pom_table = pom_table.rename(columns={
+        "player":"Player","awards":"Awards",
+        "matches_played":"Matches","matches_per_award":"Matches/Award"
+    })
+    pom_table.index = range(1, len(pom_table)+1)
     pom_counts.index   = range(1, len(pom_counts) + 1)
 
     # Enrich pom_counts with matches played and award rate
@@ -966,9 +979,8 @@ with tab4:
 
     # ── OVERVIEW — shown always ───────────────────────────────────────────────
     st.subheader("🏆 Team Performance Overview")
-    team_stats = _cache["team_stats"]
-    if active_teams:
-        team_stats = team_stats[team_stats["team"].isin(active_teams)]
+    # Recompute from filtered matches (respects season/event/team filters)
+    team_stats = get_team_stats(final_matches)
     st.dataframe(team_stats, use_container_width=True, height=350)
 
     # ── TEAM DASHBOARD — shown when team selected ─────────────────────────────
@@ -1139,7 +1151,7 @@ with tab4:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("🪙 Toss Analysis")
-                toss_tm = _cache["toss_stats"]
+                toss_tm = get_toss_stats(final_matches)
                 toss_tm = toss_tm[toss_tm["toss_winner"] == dashboard_team]
                 if not toss_tm.empty:
                     st.dataframe(toss_tm, use_container_width=True)
@@ -1154,7 +1166,7 @@ with tab4:
 
             with col2:
                 st.subheader("🏏 Bat First vs Second")
-                bat_ord_tm = _cache["bat_order_stats"]
+                bat_ord_tm = get_batting_order_stats(final_matches, final_deliveries)
                 bat_ord_tm = bat_ord_tm[bat_ord_tm["team"] == dashboard_team]
                 if not bat_ord_tm.empty:
                     st.dataframe(bat_ord_tm, use_container_width=True)
@@ -1176,18 +1188,14 @@ with tab4:
     else:
         # ── OVERVIEW CHARTS (no team selected) ───────────────────────────────
         st.subheader("🏏 Batting First vs Batting Second")
-        bat_order = _cache["bat_order_stats"]
-        if active_teams:
-            bat_order = bat_order[bat_order["team"].isin(active_teams)]
+        bat_order = get_batting_order_stats(final_matches, final_deliveries)
         st.caption("Win records when batting first vs chasing")
         st.dataframe(bat_order, use_container_width=True, height=350)
 
     
 
         st.subheader("🪙 Toss Analysis")
-        toss = _cache["toss_stats"]
-        if active_teams:
-            toss = toss[toss["toss_winner"].isin(active_teams)]
+        toss = get_toss_stats(final_matches)
         st.dataframe(toss, use_container_width=True)
 
     st.download_button(
@@ -1592,8 +1600,22 @@ with tab6:
 
     # Precompute ALL player profiles once — cached by data size so recomputes
     # only when filters change. Individual lookups are then instant (dict key).
-    # Instant — loaded from cache computed at upload time
-    all_profiles = _cache["all_profiles"]
+    # Recompute profiles from filtered deliveries (respects season/team filters)
+    # Use cache only when no filters are active (all matches selected)
+    _no_filters = (
+        not selected_seasons and not selected_events and
+        not selected_main_team and not selected_events
+    )
+    if _no_filters:
+        all_profiles = _cache["all_profiles"]
+    else:
+        @st.cache_data(show_spinner=False)
+        def _filtered_profiles(match_ids_hash, del_hash):
+            return precompute_all_profiles(final_deliveries, final_matches)
+        all_profiles = _filtered_profiles(
+            hash(frozenset(valid_match_ids)),
+            len(final_deliveries)
+        )
 
     # Filter player list to selected main team if active
     if valid_team_players is not None:
