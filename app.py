@@ -1612,7 +1612,10 @@ with tab6:
     else:
         @st.cache_data(show_spinner=False)
         def _filtered_profiles(match_ids_hash, del_hash):
-            return precompute_all_profiles(final_deliveries, final_matches)
+            return precompute_all_profiles(
+                final_deliveries.reset_index(drop=True),
+                final_matches.reset_index(drop=True)
+            )
         all_profiles = _filtered_profiles(
             hash(frozenset(valid_match_ids)),
             len(final_deliveries)
