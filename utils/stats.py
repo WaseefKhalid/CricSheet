@@ -296,14 +296,16 @@ def get_batting_order_stats(matches: pd.DataFrame, deliveries: pd.DataFrame) -> 
         return pd.DataFrame()
 
     # Find which team batted first in each match (innings == 1)
+    _del = deliveries.reset_index(drop=True)
+    _mat = matches.reset_index(drop=True)
     inn1 = (
-        deliveries[pd.to_numeric(deliveries["innings"], errors="coerce") == 1]
+        _del[pd.to_numeric(_del["innings"], errors="coerce") == 1]
         [["match_id", "batting_team"]]
         .drop_duplicates("match_id")
         .rename(columns={"batting_team": "bat_first_team"})
     )
 
-    df = matches.merge(inn1, on="match_id", how="left")
+    df = _mat.merge(inn1, on="match_id", how="left")
     df["bat_second_team"] = np.where(
         df["bat_first_team"] == df["team1"], df["team2"], df["team1"]
     )
@@ -604,6 +606,10 @@ def precompute_all_profiles(
     Much faster than calling get_player_profile() per player.
     """
     profiles = {}
+
+    # Always reset index to avoid match_id being both index and column
+    deliveries = deliveries.reset_index(drop=True)
+    matches    = matches.reset_index(drop=True)
 
     # ── shared lookup: venue per match ───────────────────────────────────────
     venue_map = matches.set_index("match_id")["venue"].to_dict() if "venue" in matches.columns else {}
