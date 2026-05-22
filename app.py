@@ -43,7 +43,7 @@ def _discover_leagues(data_dir="data"):
 AVAILABLE_LEAGUES = _discover_leagues()
 
 st.set_page_config(
-    page_title="Waseef Analytical Portal",
+    page_title="Ball By Ball Analytical Portal",
     page_icon="🏏",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -71,7 +71,7 @@ _active = st.session_state.get("active_league")
 
 _, col, _ = st.columns([1, 3, 1])
 with col:
-    st.markdown("<h1 style='text-align:center;'>🏏 Waseef Analytical Portal</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>🏏 Ball By Ball Analytical Portal</h1>", unsafe_allow_html=True)
     if _active:
         st.markdown(f"<p style='text-align:center;color:#1DB954;font-weight:600;'>📊 {_active}</p>", unsafe_allow_html=True)
     else:
