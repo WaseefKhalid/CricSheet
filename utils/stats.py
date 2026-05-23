@@ -1029,3 +1029,179 @@ def precompute_all_profiles(
         profiles[player] = profile
 
     return profiles
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTEXTUAL STATS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_contextual_stats(
+    player: str,
+    deliveries: pd.DataFrame,
+    matches: pd.DataFrame,
+    wickets_filter: list = None,
+    over_filter: list = None,
+    rr_filter: str = None,
+) -> dict:
+    """
+    Compute match-situation-aware batting stats for a player.
+
+    Filters:
+      wickets_filter : list of ints e.g. [0,1,2]  — wickets down when player came in
+      over_filter    : list of ints e.g. [1,2,3]  — over number when player came in
+      rr_filter      : "<6" | "6-9" | "9+"        — team RR when player came in
+
+    Returns dict with keys:
+      "bat_first"  : dict(innings, runs, avg, sr, highest)
+      "bat_second" : dict(innings, runs, avg, sr, highest)
+      "sr_prog"    : dict(bat_first=[], bat_second=[])  — SR by 10-ball blocks
+      "sample_warning" : bool
+    """
+
+    if deliveries.empty or player not in deliveries["striker"].values:
+        empty = {"innings": 0, "runs": 0, "avg": 0.0, "sr": 0.0, "highest": 0}
+        return {
+            "bat_first": empty, "bat_second": empty,
+            "sr_prog": {"bat_first": [], "bat_second": []},
+            "sample_warning": True,
+        }
+
+    del_df  = deliveries.reset_index(drop=True).copy()
+    mat_df  = matches.reset_index(drop=True).copy()
+
+    del_df["innings_num"] = pd.to_numeric(del_df["innings"], errors="coerce")
+    del_df["ball_num"]    = pd.to_numeric(del_df["ball"],    errors="coerce")
+    del_df["over_num"]    = del_df["ball_num"].apply(
+        lambda x: int(str(x).split(".")[0]) + 1 if pd.notna(x) else 0
+    )
+    del_df["runs_off_bat"] = del_df["runs_off_bat"].fillna(0)
+    del_df["is_legal"]     = (del_df["wides"].fillna(0) == 0) & (del_df["noballs"].fillna(0) == 0)
+    del_df["total_runs"]   = del_df["runs_off_bat"] + del_df["extras"].fillna(0)
+
+    # ── winner map ────────────────────────────────────────────────────────────
+    winner_map = mat_df.set_index("match_id")["winner"].to_dict() if "winner" in mat_df.columns else {}
+
+    # ── Build per-innings entry context ──────────────────────────────────────
+    entry_rows = []
+    for (mid, inn), grp in del_df.groupby(["match_id", "innings_num"]):
+        grp = grp.sort_values("ball_num")
+
+        # Find first ball this player faced
+        p_balls = grp[grp["striker"] == player]
+        if p_balls.empty:
+            continue
+
+        first_ball_idx = p_balls.index[0]
+        first_ball_pos = grp.index.get_loc(first_ball_idx)
+
+        # Deliveries BEFORE this player arrived
+        before = grp.iloc[:first_ball_pos]
+
+        # Team score and wickets at entry
+        score_at_entry   = int(before["total_runs"].sum())
+        wickets_at_entry = int(before["wicket_type"].notna().sum())
+
+        # Legal balls bowled before entry
+        legal_before     = int(before["is_legal"].sum())
+        overs_at_entry   = legal_before / 6 if legal_before > 0 else 0
+        over_num_entry   = int(before["over_num"].max()) + 1 if not before.empty else 1
+        rr_at_entry      = round(score_at_entry / overs_at_entry, 2) if overs_at_entry > 0 else 0.0
+
+        # Player's own stats this innings
+        p_grp       = grp[grp["striker"] == player]
+        p_runs      = int(p_grp["runs_off_bat"].sum())
+        p_balls_f   = int((p_grp["is_legal"]).sum())
+        dismissed   = int(grp["player_dismissed"].eq(player).sum())
+        batting_inn = int(inn)
+
+        entry_rows.append({
+            "match_id":         mid,
+            "innings":          batting_inn,
+            "wickets_at_entry": wickets_at_entry,
+            "over_at_entry":    over_num_entry,
+            "rr_at_entry":      rr_at_entry,
+            "p_runs":           p_runs,
+            "p_balls":          p_balls_f,
+            "dismissed":        dismissed,
+            "batting_team":     grp["batting_team"].iloc[0] if "batting_team" in grp.columns else "",
+        })
+
+    if not entry_rows:
+        empty = {"innings": 0, "runs": 0, "avg": 0.0, "sr": 0.0, "highest": 0}
+        return {"bat_first": empty, "bat_second": empty,
+                "sr_prog": {"bat_first": [], "bat_second": []}, "sample_warning": True}
+
+    ctx = pd.DataFrame(entry_rows)
+
+    # ── Apply filters ─────────────────────────────────────────────────────────
+    if wickets_filter:
+        ctx = ctx[ctx["wickets_at_entry"].isin(wickets_filter)]
+    if over_filter:
+        ctx = ctx[ctx["over_at_entry"].isin(over_filter)]
+    if rr_filter:
+        if rr_filter == "<6":
+            ctx = ctx[ctx["rr_at_entry"] < 6]
+        elif rr_filter == "6-9":
+            ctx = ctx[ctx["rr_at_entry"].between(6, 9)]
+        elif rr_filter == "9+":
+            ctx = ctx[ctx["rr_at_entry"] > 9]
+
+    if ctx.empty:
+        empty = {"innings": 0, "runs": 0, "avg": 0.0, "sr": 0.0, "highest": 0}
+        return {"bat_first": empty, "bat_second": empty,
+                "sr_prog": {"bat_first": [], "bat_second": []}, "sample_warning": True}
+
+    # ── Split batting first vs second ─────────────────────────────────────────
+    def _agg(subset):
+        if subset.empty:
+            return {"innings": 0, "runs": 0, "avg": 0.0, "sr": 0.0, "highest": 0}
+        inns      = len(subset)
+        runs      = int(subset["p_runs"].sum())
+        dismissed = int(subset["dismissed"].sum())
+        balls     = int(subset["p_balls"].sum())
+        avg       = round(runs / dismissed, 2) if dismissed > 0 else float(runs)
+        sr        = round(runs / balls * 100, 2) if balls > 0 else 0.0
+        highest   = int(subset["p_runs"].max())
+        return {"innings": inns, "runs": runs, "avg": avg, "sr": sr, "highest": highest}
+
+    bat_first  = ctx[ctx["innings"] == 1]
+    bat_second = ctx[ctx["innings"] == 2]
+
+    # ── SR Progression by 10-ball blocks ─────────────────────────────────────
+    def _sr_prog(innings_num):
+        match_ids = ctx[ctx["innings"] == innings_num]["match_id"].tolist()
+        if not match_ids:
+            return []
+        p_del = del_df[
+            (del_df["striker"] == player) &
+            (del_df["innings_num"] == innings_num) &
+            (del_df["match_id"].isin(match_ids)) &
+            (del_df["is_legal"])
+        ].copy()
+        if p_del.empty:
+            return []
+
+        # Ball sequence per innings
+        p_del["inn_ball"] = p_del.groupby(["match_id","innings_num"]).cumcount() + 1
+
+        blocks = [(1,10,"1-10"),(11,20,"11-20"),(21,30,"21-30"),(31,200,"31+")]
+        result = []
+        for lo, hi, label in blocks:
+            blk = p_del[p_del["inn_ball"].between(lo, hi)]
+            if blk.empty:
+                continue
+            runs  = int(blk["runs_off_bat"].sum())
+            balls = len(blk)
+            sr    = round(runs / balls * 100, 1) if balls > 0 else 0.0
+            result.append({"block": label, "sr": sr, "runs": runs, "balls": balls})
+        return result
+
+    return {
+        "bat_first":       _agg(bat_first),
+        "bat_second":      _agg(bat_second),
+        "sr_prog": {
+            "bat_first":   _sr_prog(1),
+            "bat_second":  _sr_prog(2),
+        },
+        "sample_warning": len(ctx) < 5,
+    }
