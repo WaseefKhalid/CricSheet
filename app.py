@@ -14,6 +14,7 @@ from utils.stats import (
     get_batting_order_stats,
     get_player_profile,
     precompute_all_profiles,
+    get_contextual_stats,
 )
 from components.charts import (
     plot_top_batsmen,
@@ -43,7 +44,7 @@ def _discover_leagues(data_dir="data"):
 AVAILABLE_LEAGUES = _discover_leagues()
 
 st.set_page_config(
-    page_title="Ball By Ball Analytical Portal",
+    page_title="Waseef Analytical Portal",
     page_icon="🏏",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -71,7 +72,7 @@ _active = st.session_state.get("active_league")
 
 _, col, _ = st.columns([1, 3, 1])
 with col:
-    st.markdown("<h1 style='text-align:center;'>🏏 Ball By Ball Analytical Portal</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>🏏 Waseef Analytical Portal</h1>", unsafe_allow_html=True)
     if _active:
         st.markdown(f"<p style='text-align:center;color:#1DB954;font-weight:600;'>📊 {_active}</p>", unsafe_allow_html=True)
     else:
@@ -440,13 +441,14 @@ if "date" in final_matches.columns:
 st.markdown("---")
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏏 Batting Stats",
     "🎳 Bowling Stats",
     "🏅 MOM Analysis",
     "🏆 Team Stats",
     "📊 League Analysis",
     "👤 Player Profile",
+    "🎯 Contextual Stats",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1956,3 +1958,223 @@ with tab6:
                 mom_matches_df = mom.get("matches", pd.DataFrame())
                 if not mom_matches_df.empty:
                     st.dataframe(mom_matches_df.reset_index(drop=True), use_container_width=True)
+
+# TAB 7 — CONTEXTUAL STATS
+# ─────────────────────────────────────────────────────────────────────────────
+with tab7:
+    import plotly.express as px
+
+    st.subheader("🎯 Contextual Stats")
+    st.caption("How a batter performs based on match situation at the time they came in")
+
+    # ── Player selector ───────────────────────────────────────────────────────
+    ctx_all_players = sorted(
+        set(final_deliveries["striker"].dropna().unique()) &
+        (valid_bat_players if valid_bat_players else set(final_deliveries["striker"].dropna().unique()))
+    )
+    ctx_player = st.selectbox(
+        "🔍 Select Player",
+        options=[None] + ctx_all_players,
+        format_func=lambda x: "— Select a batter —" if x is None else x,
+        key="ctx_player"
+    )
+
+    if ctx_player:
+        st.divider()
+
+        # ── 3 Filters ─────────────────────────────────────────────────────────
+        st.markdown("#### ⚙️ Match Situation at Entry")
+        fc1, fc2, fc3 = st.columns(3)
+
+        with fc1:
+            st.markdown("**Wickets Down**")
+            wkt_opts = list(range(8))
+            sel_wkts = st.multiselect(
+                "Wickets",
+                options=wkt_opts,
+                default=[],
+                format_func=lambda x: f"{x} down",
+                key="ctx_wkts",
+                label_visibility="collapsed"
+            )
+
+        with fc2:
+            st.markdown("**Over at Entry**")
+            over_opts = list(range(1, 20))
+            sel_overs = st.multiselect(
+                "Overs",
+                options=over_opts,
+                default=[],
+                format_func=lambda x: f"Over {x}",
+                key="ctx_overs",
+                label_visibility="collapsed"
+            )
+
+        with fc3:
+            st.markdown("**Run Rate at Entry**")
+            sel_rr = st.radio(
+                "RR",
+                options=[None, "<6", "6-9", "9+"],
+                format_func=lambda x: "All" if x is None else x,
+                horizontal=True,
+                key="ctx_rr",
+                label_visibility="collapsed"
+            )
+
+        # active filter summary
+        active_filters = []
+        if sel_wkts:      active_filters.append(f"Wickets: {', '.join(str(w)+' down' for w in sel_wkts)}")
+        if sel_overs:     active_filters.append(f"Over: {', '.join(str(o) for o in sel_overs)}")
+        if sel_rr:        active_filters.append(f"RR: {sel_rr}")
+
+        if active_filters:
+            st.caption(f"🔵 Active filters — {' | '.join(active_filters)}")
+        else:
+            st.caption("ℹ️ No filters applied — showing all innings")
+
+        st.divider()
+
+        # ── Compute ───────────────────────────────────────────────────────────
+        with st.spinner("Computing..."):
+            ctx_result = get_contextual_stats(
+                player       = ctx_player,
+                deliveries   = final_deliveries,
+                matches      = final_matches,
+                wickets_filter = sel_wkts if sel_wkts else None,
+                over_filter    = sel_overs if sel_overs else None,
+                rr_filter      = sel_rr,
+            )
+
+        if ctx_result["sample_warning"] and ctx_result["bat_first"]["innings"] == 0 and ctx_result["bat_second"]["innings"] == 0:
+            st.warning("No innings found matching these filters. Try removing some filters.")
+        else:
+            if ctx_result["sample_warning"]:
+                st.warning("⚠️ Small sample size (< 5 innings) — interpret with caution")
+
+            # ── Stats table — Bat First vs Bat Second ─────────────────────────
+            st.subheader(f"📊 {ctx_player} — Situational Stats")
+
+            bf  = ctx_result["bat_first"]
+            bs  = ctx_result["bat_second"]
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("### 🏏 Batting First")
+                if bf["innings"] > 0:
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Innings",  bf["innings"])
+                    m2.metric("Runs",     bf["runs"])
+                    m3.metric("Average",  bf["avg"])
+                    m4.metric("SR",       bf["sr"])
+                    st.metric("Highest",  bf["highest"])
+                else:
+                    st.info("No batting first innings matching filters")
+
+            with col2:
+                st.markdown("### 🎯 Batting Second (Chasing)")
+                if bs["innings"] > 0:
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Innings",  bs["innings"])
+                    m2.metric("Runs",     bs["runs"])
+                    m3.metric("Average",  bs["avg"])
+                    m4.metric("SR",       bs["sr"])
+                    st.metric("Highest",  bs["highest"])
+                else:
+                    st.info("No batting second innings matching filters")
+
+            # ── Combined comparison bar chart ──────────────────────────────────
+            st.divider()
+            if bf["innings"] > 0 or bs["innings"] > 0:
+                comp_data = []
+                for metric in ["innings","runs","avg","sr"]:
+                    comp_data.append({"Metric": metric.upper(), "Bat First": bf[metric], "Bat Second": bs[metric]})
+
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    fig_avg = px.bar(
+                        pd.DataFrame([
+                            {"Type": "Bat First",   "Value": bf["avg"]},
+                            {"Type": "Bat Second",  "Value": bs["avg"]},
+                        ]),
+                        x="Type", y="Value", color="Type",
+                        color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
+                        text="Value", title="Average Comparison",
+                    )
+                    fig_avg.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
+                                         paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                    fig_avg.update_traces(textposition="outside")
+                    st.plotly_chart(fig_avg, use_container_width=True, key=_next_key())
+
+                with col_b:
+                    fig_sr = px.bar(
+                        pd.DataFrame([
+                            {"Type": "Bat First",   "Value": bf["sr"]},
+                            {"Type": "Bat Second",  "Value": bs["sr"]},
+                        ]),
+                        x="Type", y="Value", color="Type",
+                        color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
+                        text="Value", title="Strike Rate Comparison",
+                    )
+                    fig_sr.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
+                                         paper_bgcolor="rgba(0,0,0,0)", font_color="white")
+                    fig_sr.update_traces(textposition="outside")
+                    st.plotly_chart(fig_sr, use_container_width=True, key=_next_key())
+
+            # ── SR Progression ────────────────────────────────────────────────
+            st.divider()
+            st.subheader("📈 SR Progression (by 10-ball blocks)")
+
+            prog_bf = ctx_result["sr_prog"]["bat_first"]
+            prog_bs = ctx_result["sr_prog"]["bat_second"]
+
+            if prog_bf or prog_bs:
+                # Build combined dataframe
+                rows = []
+                all_blocks = ["1-10","11-20","21-30","31+"]
+                bf_map = {r["block"]: r["sr"] for r in prog_bf}
+                bs_map = {r["block"]: r["sr"] for r in prog_bs}
+                for blk in all_blocks:
+                    if blk in bf_map or blk in bs_map:
+                        rows.append({
+                            "Block":       blk,
+                            "Bat First":   bf_map.get(blk, 0),
+                            "Bat Second":  bs_map.get(blk, 0),
+                        })
+                prog_df = pd.DataFrame(rows)
+
+                col_p1, col_p2 = st.columns([3, 2])
+                with col_p1:
+                    fig_prog = px.line(
+                        prog_df.melt(id_vars="Block", var_name="Innings", value_name="SR"),
+                        x="Block", y="SR", color="Innings", markers=True,
+                        color_discrete_map={"Bat First": "#1DB954", "Bat Second": "#00b4d8"},
+                        title="SR by Ball Block",
+                        labels={"Block": "Balls Faced", "SR": "Strike Rate"},
+                    )
+                    fig_prog.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                        font_color="white"
+                    )
+                    st.plotly_chart(fig_prog, use_container_width=True, key=_next_key())
+
+                with col_p2:
+                    # Table view
+                    st.markdown("**SR by Ball Block**")
+                    prog_df.index += 1
+                    st.dataframe(
+                        prog_df.rename(columns={"Block":"Balls","Bat First":"Bat 1st SR","Bat Second":"Bat 2nd SR"}),
+                        use_container_width=True,
+                        height=200,
+                    )
+
+                    # Color indicator
+                    st.markdown("")
+                    for row in rows:
+                        diff = row["Bat First"] - row["Bat Second"]
+                        icon = "🟢" if diff > 5 else ("🔴" if diff < -5 else "🟡")
+                        st.caption(f"{icon} Balls {row['Block']}: Bat 1st **{row['Bat First']}** vs Bat 2nd **{row['Bat Second']}**")
+            else:
+                st.info("Not enough data for SR progression with current filters")
+    else:
+        st.info("👆 Select a player above to see their contextual stats")
