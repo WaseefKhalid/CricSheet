@@ -15,6 +15,7 @@ from utils.stats import (
     get_player_profile,
     precompute_all_profiles,
     get_contextual_stats,
+    build_entry_context,
 )
 from components.charts import (
     plot_top_batsmen,
@@ -2035,15 +2036,14 @@ with tab7:
         st.divider()
 
         # ── Compute ───────────────────────────────────────────────────────────
-        with st.spinner("Computing..."):
-            ctx_result = get_contextual_stats(
-                player       = ctx_player,
-                deliveries   = final_deliveries,
-                matches      = final_matches,
-                wickets_filter = sel_wkts if sel_wkts else None,
-                over_filter    = sel_overs if sel_overs else None,
-                rr_filter      = sel_rr,
-            )
+        ctx_result = get_contextual_stats(
+            player         = ctx_player,
+            entry_context  = _cache["entry_context"],
+            matches        = final_matches,
+            wickets_filter = sel_wkts if sel_wkts else None,
+            over_filter    = sel_overs if sel_overs else None,
+            rr_filter      = sel_rr,
+        )
 
         if ctx_result["sample_warning"] and ctx_result["bat_first"]["innings"] == 0 and ctx_result["bat_second"]["innings"] == 0:
             st.warning("No innings found matching these filters. Try removing some filters.")
