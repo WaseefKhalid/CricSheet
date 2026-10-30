@@ -1,7 +1,5 @@
-# ── Waseef Analytical Portal — "Daylight" WHITE theme ────────────────────────
-# White kit on a sunny day: white page, navy ink, deep-amber accent, ball red.
-# The CSS and charts in components/theme.py follow `base` below automatically.
-# For the night theme, use config-dark.toml instead (rename it to config.toml).
+# ── Waseef Analytical Portal — "Floodlit" theme ──────────────────────────────
+# Night-sky navy, floodlight amber, cricket-ball red, and "whites" ivory text.
 # Fonts are self-hosted from /static/fonts so the site never depends on Google.
 
 [server]
@@ -12,17 +10,17 @@ enableStaticServing = true
 toolbarMode = "minimal"
 
 [theme]
-base = "light"
-primaryColor = "#C47510"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F6F8FB"
-textColor = "#0E1528"
-linkColor = "#A85A08"
+base = "dark"
+primaryColor = "#F2A541"
+backgroundColor = "#0E1528"
+secondaryBackgroundColor = "#141C33"
+textColor = "#EEE9DD"
+linkColor = "#F2A541"
 linkUnderline = false
-borderColor = "#DFE4EC"
-dataframeBorderColor = "#E5E9F0"
-dataframeHeaderBackgroundColor = "#EEF2F7"
-dataframeHeaderTextColor = "#3D4761"
+borderColor = "#253052"
+dataframeBorderColor = "#1E2846"
+dataframeHeaderBackgroundColor = "#18213C"
+dataframeHeaderTextColor = "#B9BFD0"
 showWidgetBorder = true
 baseRadius = "8px"
 buttonRadius = "8px"
@@ -32,11 +30,11 @@ headingFont = "Big Shoulders Display, Instrument Sans, sans-serif"
 headingFontWeights = [800, 700, 700, 700, 600, 600]
 metricValueFontSize = "2.4rem"
 metricValueFontWeight = 700
-redColor = "#D6404B"
-orangeColor = "#C47510"
-blueColor = "#2A78D6"
-violetColor = "#6E56CF"
-chartCategoricalColors = ["#C47510", "#2A78D6", "#D6404B", "#6E56CF"]
+redColor = "#DD4B57"
+orangeColor = "#F2A541"
+blueColor = "#3F8FE0"
+violetColor = "#9B7BEA"
+chartCategoricalColors = ["#D07E22", "#3F8FE0", "#DD4B57", "#9B7BEA"]
 
 [[theme.fontFaces]]
 family = "Instrument Sans"
@@ -60,6 +58,6 @@ url = "app/static/fonts/BigShouldersDisplay-800.woff2"
 weight = 800
 
 [theme.sidebar]
-backgroundColor = "#F6F8FB"
-secondaryBackgroundColor = "#FFFFFF"
-borderColor = "#DFE4EC"
+backgroundColor = "#0A1022"
+secondaryBackgroundColor = "#141C33"
+borderColor = "#253052"
