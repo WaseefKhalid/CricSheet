@@ -15,14 +15,45 @@ from utils.stats import (
     get_player_profile,
     precompute_all_profiles,
 )
-from components.charts import (
-    plot_top_batsmen,
-    plot_top_bowlers,
-)
+from components import theme as ui
 
 # ── Auto-discover leagues from data/ folder ──────────────────────────────────
-# Just drop any ZIP file into /data — it appears automatically as a league option
-# Display name is derived from the filename: "psl_data.zip" → "PSL Data"
+# Just drop any ZIP file into /data — it appears automatically as a league option.
+# Cricsheet file codes are turned into proper names: "psl_male_csv2.zip" →
+# "Pakistan Super League" (Men). Unknown codes fall back to the filename.
+_CRICSHEET_NAMES = {
+    "psl": "Pakistan Super League", "ipl": "Indian Premier League",
+    "bbl": "Big Bash League", "wbb": "Women's Big Bash League",
+    "cpl": "Caribbean Premier League", "sat": "SA20", "ilt": "ILT20",
+    "mlc": "Major League Cricket", "lpl": "Lanka Premier League",
+    "bpl": "Bangladesh Premier League", "npl": "Nepal Premier League",
+    "hnd": "The Hundred", "ntb": "Vitality Blast", "ssm": "Super Smash",
+    "msl": "Mzansi Super League", "wpl": "Women's Premier League",
+    "wcl": "World Championship of Legends",
+    "odis": "One-Day Internationals", "odms": "One-Day Matches",
+    "t20s": "T20 Internationals", "it20s": "Other T20 Internationals",
+    "tests": "Test Matches", "mdms": "Multi-day Matches",
+}
+
+
+def _league_label(fname):
+    """Return (display_name, gender_tag or None) for a data file name."""
+    stem = os.path.splitext(fname)[0].lower()
+    stem = stem.split(" (")[0]                       # "psl_male_csv2 (6)" → "psl_male_csv2"
+    parts = [p for p in stem.replace("-", "_").split("_") if p]
+    gender = None
+    if "male" in parts:
+        gender = "Men"
+    if "female" in parts:
+        gender = "Women"
+    core = [p for p in parts if p not in ("male", "female", "csv", "csv2", "json", "all")]
+    if core and core[0] in _CRICSHEET_NAMES:
+        name = " ".join([_CRICSHEET_NAMES[core[0]]] + [p.upper() for p in core[1:]])
+    else:
+        name = " ".join(w.upper() if len(w) <= 4 else w.capitalize() for w in core) or fname
+    return name, gender
+
+
 def _discover_leagues(data_dir="data"):
     """Scan data/ folder and return {display_name: file_path} for all ZIPs found."""
     leagues = {}
@@ -31,53 +62,40 @@ def _discover_leagues(data_dir="data"):
     for fname in sorted(os.listdir(data_dir)):
         if fname.lower().endswith(".zip"):
             path = os.path.join(data_dir, fname)
-            # Build a clean display name from filename
-            # "psl_data.zip" → "PSL Data"
-            # "ipl_2024.zip" → "IPL 2024"
-            # "t20_internationals.zip" → "T20 Internationals"
-            name = fname.replace(".zip", "").replace("_", " ").replace("-", " ")
-            name = " ".join(w.upper() if len(w) <= 4 else w.capitalize() for w in name.split())
-            leagues[name] = path
+            name, gender = _league_label(fname)
+            display = name
+            # Keep names unique if two files map to the same league
+            # (e.g. men's and women's ODIs)
+            if display in leagues and gender:
+                display = f"{name} ({gender})"
+            base, n = display, 2
+            while display in leagues:
+                display, n = f"{base} {n}", n + 1
+            leagues[display] = path
+            LEAGUE_GENDER[display] = gender
     return leagues
 
+
+LEAGUE_GENDER = {}
 AVAILABLE_LEAGUES = _discover_leagues()
 
 st.set_page_config(
     page_title="Waseef Analytical Portal",
     page_icon="🏏",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
-# Global chart key counter — must be after set_page_config
-if "_chart_counter" not in st.session_state:
-    st.session_state._chart_counter = 0
+# Chart keys restart at 0 on every run so each chart keeps the same key
+# between reruns (no remounting / flicker when a filter changes).
+st.session_state._chart_counter = 0
 
-def _next_key():
-    st.session_state._chart_counter += 1
-    return f"chart_{st.session_state._chart_counter}"
-
-
-# ── Minimal CSS — only what Streamlit reliably supports ──────────────────────
-st.markdown("""
-<style>
-    #MainMenu, footer { visibility: hidden; }
-    .block-container { padding-top: 1rem !important; }
-</style>
-""", unsafe_allow_html=True)
+ui.inject_css()
 
 # ── Header ────────────────────────────────────────────────────────────────────
 _active = st.session_state.get("active_league")
-
-_, col, _ = st.columns([1, 3, 1])
-with col:
-    st.markdown("<h1 style='text-align:center;'>🏏 Waseef Analytical Portal</h1>", unsafe_allow_html=True)
-    if _active:
-        st.markdown(f"<p style='text-align:center;color:#1DB954;font-weight:600;'>📊 {_active}</p>", unsafe_allow_html=True)
-    else:
-        st.markdown("<p style='text-align:center;color:#8b949e;'>Transforming ball-by-ball cricket data into deep insights</p>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>🔗 <a href='https://www.linkedin.com/in/waseef-khalid-khan-366951237' target='_blank'>Connect on LinkedIn — Waseef Khalid Khan</a></p>", unsafe_allow_html=True)
-st.divider()
+if _active:
+    ui.top_bar()
 
 # ── Session State ─────────────────────────────────────────────────────────────
 if "matches_df" not in st.session_state:
@@ -94,28 +112,28 @@ def _compute_and_cache(matches_df, deliveries_df, progress_bar, status_text):
     """Compute all stats and store in session state."""
     def _step(msg, pct):
         status_text.markdown(
-            f'<div class="progress-label">{msg} &nbsp;&nbsp; <b>{int(pct*100)}%</b></div>',
+            f'<div class="progress-label">{msg}<b>{int(pct*100)}%</b></div>',
             unsafe_allow_html=True,
         )
         progress_bar.progress(pct)
 
-    _step("🏏 Computing batting stats...", 0.20)
+    _step("Working out batting figures", 0.20)
     batting_all = get_batting_stats(deliveries_df, min_innings=1)
 
-    _step("🎳 Computing bowling stats...", 0.38)
+    _step("Working out bowling figures", 0.38)
     bowling_all = get_bowling_stats(deliveries_df, min_overs=1)
 
-    _step("📋 Computing match & team results...", 0.54)
+    _step("Tallying match and team results", 0.54)
     match_stats_all     = get_match_stats(matches_df)
     team_stats_all      = get_team_stats(matches_df)
     toss_stats_all      = get_toss_stats(matches_df)
     bat_order_stats_all = get_batting_order_stats(matches_df, deliveries_df)
     pom_stats_all       = get_player_of_match_stats(matches_df)
 
-    _step("👤 Building all player profiles...", 0.75)
+    _step("Building every player profile", 0.75)
     all_profiles = precompute_all_profiles(deliveries_df, matches_df)
 
-    _step("✅ Finalising & indexing...", 0.93)
+    _step("Indexing deliveries", 0.93)
     deliveries_df = deliveries_df.set_index("match_id", drop=False)
 
     st.session_state.matches_df    = matches_df
@@ -135,13 +153,17 @@ def _compute_and_cache(matches_df, deliveries_df, progress_bar, status_text):
 
 
 # ── LEAGUE SELECTOR — shown when no league loaded or user wants to switch ──────
+def _loading_header(league_name):
+    ui.section(f"Loading {league_name}", "Every stat is worked out once now, so filtering afterwards is instant.")
+
+
 def _load_league(league_name, zip_path):
     """Load a league zip and compute all stats."""
-    st.markdown(f"### ⏳ Loading **{league_name}** — please wait...")
+    _loading_header(league_name)
     pb = st.progress(0)
     st_txt = st.empty()
     st_txt.markdown(
-        '<div class="progress-label">📂 Reading data file... &nbsp; <b>5%</b></div>',
+        '<div class="progress-label">Reading match files<b>5%</b></div>',
         unsafe_allow_html=True,
     )
     pb.progress(0.05)
@@ -152,87 +174,91 @@ def _load_league(league_name, zip_path):
     st.rerun()
 
 
+def _admin_password():
+    # st.secrets raises when no secrets.toml exists (e.g. running locally)
+    try:
+        return st.secrets.get("ADMIN_PASSWORD", "waseef123")
+    except Exception:
+        return "waseef123"
+
+
+def _count_matches(zip_path):
+    import zipfile
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            return len([f for f in z.namelist() if f.endswith("_info.csv")])
+    except Exception:
+        return 0
+
+
 # Show league picker if no league loaded yet OR user clicks switch
 show_picker = (
     st.session_state.matches_df is None or
     st.session_state.active_league is None
 )
 
-# Switch league button in sidebar (only after data is loaded)
+
+def _switch_league():
+    st.session_state.matches_df    = None
+    st.session_state.deliveries_df = None
+    st.session_state.cached        = None
+    st.session_state.active_league = None
+
+
+# League block at the top of the sidebar (only after data is loaded)
 if not show_picker and st.session_state.active_league:
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🔄 Switch League"):
-        st.session_state.matches_df    = None
-        st.session_state.deliveries_df = None
-        st.session_state.cached        = None
-        st.session_state.active_league = None
-        st.rerun()
+    with st.sidebar:
+        st.markdown(
+            f'<div class="wz-side-kicker">Exploring</div>'
+            f'<div class="wz-side-league">{st.session_state.active_league}</div>',
+            unsafe_allow_html=True,
+        )
+        st.write("")
+        st.button("Switch league", icon=":material/swap_horiz:", on_click=_switch_league,
+                  width="stretch")
+
+# A league was picked on the previous run: load it on a clean page
+_pending = st.session_state.pop("_pending_league", None)
+if show_picker and _pending:
+    ui.top_bar()
+    _load_league(*_pending)
 
 if show_picker:
-    st.markdown("---")
     if AVAILABLE_LEAGUES:
-        st.markdown("## 🏏 Select a League to Explore")
-        st.markdown("Choose which cricket league you want to analyse:")
-        st.markdown("")
-
-        # Show league cards in a grid
-        import zipfile
-        from datetime import datetime
-        cols = st.columns(min(len(AVAILABLE_LEAGUES), 3))
-        for i, (league_name, zip_path) in enumerate(AVAILABLE_LEAGUES.items()):
-            with cols[i % 3]:
-                # Match count
-                try:
-                    with zipfile.ZipFile(zip_path) as z:
-                        n_matches = len([f for f in z.namelist() if f.endswith("_info.csv")])
-                except Exception:
-                    n_matches = 0
-
-                # Last updated date from file modification time
-                try:
-                    mod_time = os.path.getmtime(zip_path)
-                    updated  = datetime.fromtimestamp(mod_time).strftime("%d %b %Y")
-                except Exception:
-                    updated = "Unknown"
-
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #0d1f2d 0%, #0a1628 100%);
-                    border-radius: 14px;
-                    padding: 1.5rem 1.2rem 1rem 1.2rem;
-                    border: 1px solid #1a3550;
-                    text-align: center;
-                    margin-bottom: 0.5rem;
-                    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-                    transition: all 0.2s;
-                ">
-                    <div style="font-size:2.2rem;margin-bottom:0.4rem;">🏏</div>
-                    <div style="font-size:1.2rem;font-weight:800;color:#ffffff;
-                                margin-bottom:0.5rem;letter-spacing:-0.3px;">
-                        {league_name}
-                    </div>
-                    <div style="display:inline-block;background:rgba(29,185,84,0.12);
-                                border:1px solid rgba(29,185,84,0.3);border-radius:20px;
-                                padding:0.2rem 0.8rem;font-size:0.82rem;color:#1DB954;
-                                font-weight:600;margin-bottom:0.4rem;">
-                        {n_matches} matches
-                    </div>
-
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button(f"▶ Load {league_name}", key=f"load_{i}", use_container_width=True):
-                    _load_league(league_name, zip_path)
+        _counts = {name: _count_matches(path) for name, path in AVAILABLE_LEAGUES.items()}
+        hero_l, hero_r = st.columns([1.05, 1], gap="large", vertical_alignment="center")
+        with hero_l:
+            ui.hero()
+        with hero_r:
+            _total = sum(_counts.values())
+            st.markdown(
+                f'<p class="wz-pick-head">Choose a league. {_total:,} matches on file, '
+                f'every ball recorded.</p>', unsafe_allow_html=True)
+            with st.container(border=True):
+                for i, (league_name, zip_path) in enumerate(AVAILABLE_LEAGUES.items()):
+                    if i:
+                        st.markdown('<hr style="margin:.2rem 0 !important">', unsafe_allow_html=True)
+                    gender = LEAGUE_GENDER.get(league_name)
+                    meta = f"{gender}'s competition" if gender else "Cricsheet ball-by-ball data"
+                    c_name, c_count = st.columns([3, 1.2], vertical_alignment="center")
+                    with c_name:
+                        st.markdown(ui.league_row_text(league_name, meta), unsafe_allow_html=True)
+                    with c_count:
+                        st.markdown(ui.league_count(_counts[league_name]), unsafe_allow_html=True)
+                    if st.button(f"Open {league_name}", key=f"load_{i}", width="stretch"):
+                        st.session_state._pending_league = (league_name, zip_path)
+                        st.rerun()
 
         # Upload option — only shown to admin (password protected)
-        st.markdown("---")
-        with st.expander("🔐 Admin: Upload a new league"):
+        st.write("")
+        with st.expander("Upload a new league (admin)", icon=":material/lock:"):
             admin_pass = st.text_input("Admin password", type="password", key="admin_pass")
-            if admin_pass == st.secrets.get("ADMIN_PASSWORD", "waseef123"):
-                uploaded_file = st.file_uploader("Upload Cricket CSV zip", type=["zip"])
-                custom_name   = st.text_input("League name", placeholder="e.g. SA20, LPL, MLC...")
+            if admin_pass and admin_pass == _admin_password():
+                uploaded_file = st.file_uploader("Cricsheet CSV zip", type=["zip"])
+                custom_name   = st.text_input("League name", placeholder="e.g. SA20, LPL, MLC")
                 if uploaded_file and custom_name:
-                    if st.button("Load uploaded data"):
-                        st.markdown(f"### ⏳ Loading **{custom_name}**...")
+                    if st.button("Load uploaded league", type="primary"):
+                        _loading_header(custom_name)
                         pb = st.progress(0)
                         st_txt = st.empty()
                         pb.progress(0.05)
@@ -241,15 +267,17 @@ if show_picker:
                         st.session_state.active_league = custom_name
                         st.rerun()
             elif admin_pass:
-                st.error("❌ Incorrect password")
+                st.error("That password isn't right. Check it and try again.")
     else:
         # No leagues in data/ folder — show upload
-        st.markdown("## 👋 Welcome to Waseef Analytical Portal")
-        st.markdown("No pre-loaded leagues found. Upload a cricket CSV zip to get started.")
-        uploaded_file = st.file_uploader("Upload Cricket CSV zip", type=["zip"])
-        custom_name   = st.text_input("League name", placeholder="e.g. PSL, IPL, T20I...")
+        ui.hero()
+        ui.section("Add your first league",
+                   "No leagues are on file yet. Upload a Cricsheet CSV zip to start.")
+        uploaded_file = st.file_uploader("Cricsheet CSV zip", type=["zip"])
+        custom_name   = st.text_input("League name", placeholder="e.g. PSL, IPL, T20I")
         if uploaded_file and custom_name:
-            if st.button("Load"):
+            if st.button("Load league", type="primary"):
+                _loading_header(custom_name)
                 pb = st.progress(0)
                 st_txt = st.empty()
                 pb.progress(0.05)
@@ -257,6 +285,7 @@ if show_picker:
                 _compute_and_cache(matches_df, deliveries_df, pb, st_txt)
                 st.session_state.active_league = custom_name
                 st.rerun()
+    ui.footer()
     st.stop()
 
 # ── Guard ─────────────────────────────────────────────────────────────────────
@@ -268,14 +297,25 @@ deliveries_df: pd.DataFrame = st.session_state.deliveries_df
 _cache = st.session_state.cached  # precomputed stats dict
 
 # ── Sidebar Filters ───────────────────────────────────────────────────────────
-st.sidebar.markdown("## 🔍 Filters")
-st.sidebar.markdown("---")
+_FILTER_KEYS = ["f_season", "f_event", "f_team", "f_bat_team", "f_bowl_team",
+                "f_venue", "f_toss_winner", "f_toss_decision", "f_winner"]
+
+
+def _reset_filters():
+    for k in _FILTER_KEYS:
+        st.session_state.pop(k, None)
+
+
+st.sidebar.divider()
+st.sidebar.header("Filters", anchor=False)
+st.sidebar.caption("Each filter narrows the options in the ones below it.")
 
 filter_opts = get_filter_options(matches_df)
 
 # Season
 selected_seasons = st.sidebar.multiselect(
-    "📅 Season", options=filter_opts["seasons"], default=[]
+    "Season", options=filter_opts["seasons"], default=[], key="f_season",
+    placeholder="All seasons",
 )
 filtered_matches_temp = apply_filters(matches_df, {"season": selected_seasons})
 opts_after_season = get_filter_options(filtered_matches_temp)
@@ -283,11 +323,12 @@ opts_after_season = get_filter_options(filtered_matches_temp)
 # Event filter — key for T20 data with multiple tournaments
 _event_opts = opts_after_season.get("events", [])
 if len(_event_opts) > 1:
-    st.sidebar.markdown("#### 🏆 Event / Tournament")
     selected_events = st.sidebar.multiselect(
-        "🏆 Event",
+        "Event",
         options=_event_opts,
         default=[],
+        key="f_event",
+        placeholder="All events",
         help="Filter by specific tournament/event e.g. T20 World Cup, PSL, etc."
     )
     if selected_events:
@@ -297,12 +338,13 @@ else:
     selected_events = []
 
 # ── MAIN TEAM FILTER — filters everything at once ─────────────────────────
-st.sidebar.markdown("#### 🏆 Team")
 selected_main_team = st.sidebar.multiselect(
-    "🏆 Team (All Stats)",
+    "Team",
     options=opts_after_season["teams"],
     default=[],
-    help="Filters ALL tabs — batting, bowling, matches, team stats, player profiles",
+    key="f_team",
+    placeholder="All teams",
+    help="Filters every tab: batting, bowling, matches, team stats and player profiles",
 )
 if selected_main_team:
     filtered_matches_temp = apply_filters(filtered_matches_temp, {"team": selected_main_team})
@@ -310,16 +352,18 @@ if selected_main_team:
 opts_after_main_team = get_filter_options(filtered_matches_temp)
 
 # ── ADVANCED: separate batting/bowling team overrides ─────────────────────
-with st.sidebar.expander("⚙️ Advanced Team Filters", expanded=False):
-    st.caption("Override main team filter for specific stat tabs")
+with st.sidebar.expander("Batting and bowling teams", icon=":material/tune:", expanded=False):
+    st.caption("Overrides the team filter on the batting and bowling tabs")
     selected_batting_teams = st.multiselect(
-        "🏏 Batting Team (override)",
-        options=opts_after_main_team["teams"], default=[],
+        "Batting team",
+        options=opts_after_main_team["teams"], default=[], key="f_bat_team",
+        placeholder="Same as team filter",
         help="Show batting stats only for this team",
     )
     selected_bowling_teams = st.multiselect(
-        "🎳 Bowling Team (override)",
-        options=opts_after_main_team["teams"], default=[],
+        "Bowling team",
+        options=opts_after_main_team["teams"], default=[], key="f_bowl_team",
+        placeholder="Same as team filter",
         help="Show bowling stats only for this team",
     )
 
@@ -336,38 +380,45 @@ if selected_teams:
 
 opts_after_team = get_filter_options(filtered_matches_temp)
 
-st.sidebar.markdown("#### 🔍 Match Filters")
-
 # Venue
 selected_venues = st.sidebar.multiselect(
-    "📍 Venue", options=opts_after_team["venues"], default=[]
+    "Venue", options=opts_after_team["venues"], default=[], key="f_venue",
+    placeholder="All venues",
 )
 filtered_matches_temp = apply_filters(filtered_matches_temp, {"venue": selected_venues})
 opts_after_venue = get_filter_options(filtered_matches_temp)
 
 # Toss Winner
 selected_toss_winners = st.sidebar.multiselect(
-    "🪙 Toss Winner", options=opts_after_venue["toss_winners"], default=[]
+    "Toss winner", options=opts_after_venue["toss_winners"], default=[], key="f_toss_winner",
+    placeholder="Any team",
 )
 filtered_matches_temp = apply_filters(filtered_matches_temp, {"toss_winner": selected_toss_winners})
 opts_after_toss = get_filter_options(filtered_matches_temp)
 
 # Toss Decision
 selected_toss_decision = st.sidebar.multiselect(
-    "⚡ Toss Decision", options=opts_after_toss["toss_decisions"], default=[]
+    "Toss decision", options=opts_after_toss["toss_decisions"], default=[], key="f_toss_decision",
+    placeholder="Bat or field",
 )
 filtered_matches_temp = apply_filters(filtered_matches_temp, {"toss_decision": selected_toss_decision})
 
 # Winner
 selected_winners = st.sidebar.multiselect(
-    "🏆 Match Winner", options=get_filter_options(filtered_matches_temp)["winners"], default=[]
+    "Match winner", options=get_filter_options(filtered_matches_temp)["winners"], default=[],
+    key="f_winner", placeholder="Any team",
 )
 filtered_matches_temp = apply_filters(filtered_matches_temp, {"winner": selected_winners})
 
-st.sidebar.markdown("---")
-st.sidebar.markdown(f"**Matches in view:** `{len(filtered_matches_temp)}`")
-if st.sidebar.button("🔄 Reset All Filters"):
-    st.rerun()
+st.sidebar.divider()
+st.sidebar.markdown(
+    f'<div class="wz-inview"><b>{len(filtered_matches_temp):,}</b>'
+    f'of {len(matches_df):,} matches in view</div>',
+    unsafe_allow_html=True,
+)
+st.sidebar.write("")
+st.sidebar.button("Reset all filters", icon=":material/restart_alt:", on_click=_reset_filters,
+                  width="stretch")
 
 # ── Final filtered data ───────────────────────────────────────────────────────
 final_matches = filtered_matches_temp
@@ -415,59 +466,68 @@ if selected_main_team:
     _bowl_p = valid_bowl_players or set(final_deliveries["bowler"].dropna().unique())
     valid_team_players = _bat_p | _bowl_p
 
-# ── KPI Row ───────────────────────────────────────────────────────────────────
-st.subheader("📊 Overview")
+# ── Title + scoreboard ────────────────────────────────────────────────────────
+_title = st.session_state.active_league
+_gender = LEAGUE_GENDER.get(_title)
+if "gender" in matches_df.columns and matches_df["gender"].dropna().nunique() == 1:
+    _gender = {"male": "Men", "female": "Women"}.get(str(matches_df["gender"].dropna().iloc[0]).lower(), _gender)
 
-k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric("🏏 Matches", len(final_matches))
-k2.metric("⚡ Total Deliveries", f"{len(final_deliveries):,}")
-k3.metric("🏃 Total Runs", f"{int(final_deliveries['runs_off_bat'].sum() + final_deliveries['extras'].sum()):,}")
-k4.metric("🎯 Total Wickets", f"{int(final_deliveries['wicket_type'].notna().sum()):,}")
-k5.metric("🏟️ Venues", f"{final_matches['venue'].nunique()}")
+_seasons_all = matches_df["season"].dropna().nunique() if "season" in matches_df.columns else 0
+_dek = f"{len(matches_df):,} matches across {_seasons_all} seasons" if _seasons_all else None
+ui.page_title(_title, chip=_gender, dek=_dek)
 
-# Data range row
+_fmt = lambda d: f"{pd.Timestamp(d).day} {pd.Timestamp(d).strftime('%b %Y')}" if pd.notna(d) else "—"
+_foot = None
 if "date" in final_matches.columns:
     _dates = final_matches["date"].dropna().sort_values()
     if not _dates.empty:
         _earliest = _dates.iloc[0]
         _latest   = _dates.iloc[-1]
-        _fmt = lambda d: pd.Timestamp(d).strftime("%d %b %Y") if pd.notna(d) else "—"
-        dr1, dr2, dr3 = st.columns(3)
-        dr1.markdown(f"📅 **Earliest match:** {_fmt(_earliest)}")
-        dr2.markdown(f"📅 **Latest match:** {_fmt(_latest)}")
-        dr3.markdown(f"📆 **Data span:** {int((_latest - _earliest).days / 365.25)} years")
+        _years    = int((_latest - _earliest).days / 365.25)
+        _span     = f", a {_years}-year span" if _years >= 1 else ""
+        _foot = f"Matches played from <b>{_fmt(_earliest)}</b> to <b>{_fmt(_latest)}</b>{_span}."
+if len(final_matches) != len(matches_df):
+    _foot = (_foot or "") + f" Filters are on: showing {len(final_matches):,} of {len(matches_df):,} matches."
 
-st.markdown("---")
+ui.scoreboard([
+    (f"{len(final_matches):,}", "Matches"),
+    (f"{len(final_deliveries):,}", "Deliveries"),
+    (f"{int(final_deliveries['runs_off_bat'].sum() + final_deliveries['extras'].sum()):,}", "Runs"),
+    (f"{int(final_deliveries['wicket_type'].notna().sum()):,}", "Wickets"),
+    (f"{final_matches['venue'].nunique()}", "Venues"),
+], foot=_foot)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏏 Batting Stats",
-    "🎳 Bowling Stats",
-    "🏅 MOM Analysis",
-    "🏆 Team Stats",
-    "📊 League Analysis",
-    "👤 Player Profile",
+    "Batting",
+    "Bowling",
+    "Player of the match",
+    "Teams",
+    "League trends",
+    "Player profiles",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 — BATTING
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.subheader("🏏 Batting Statistics")
+    ui.lede("Career figures for every batter in the matches you've selected.")
 
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        min_innings = st.number_input("Min Innings", min_value=1, value=3, step=1, key="min_inn")
+        min_innings = st.number_input("Minimum innings", min_value=1, value=3, step=1, key="min_inn")
     with col2:
-        sort_by_bat = st.selectbox("Sort By", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"], key="sort_bat")
+        sort_by_bat = st.selectbox("Sort by", ["runs", "average", "strike_rate", "hundreds", "fifties", "innings"],
+                                   key="sort_bat", format_func=ui.nice_label)
     with col3:
-        use_pos_filter = st.toggle("🔢 Filter by Batting Position", value=False)
+        ui.spacer()
+        use_pos_filter = st.toggle("Only innings at certain batting positions", value=False)
         if use_pos_filter:
             selected_positions = st.multiselect(
-                "Position(s)",
+                "Batting positions",
                 options=list(range(1, 12)),
                 default=[1, 2],
-                format_func=lambda x: f"#{x}",
+                format_func=lambda x: f"No. {x}",
             )
         else:
             selected_positions = []
@@ -514,28 +574,31 @@ with tab1:
     batting = batting.sort_values(sort_by_bat, ascending=False).reset_index(drop=True)
     batting.index += 1
 
-    if use_pos_filter and selected_positions:
-        st.caption(f"📍 Stats at position(s) {', '.join(map(str, selected_positions))} only")
-
-    col_th, col_dl = st.columns([6,1])
+    col_th, col_dl = st.columns([5, 1], vertical_alignment="bottom")
     with col_th:
-        st.markdown(f"**Batters** — {len(batting)} players")
+        _pos_note = (f", batting at No. {', '.join(map(str, sorted(selected_positions)))}"
+                     if use_pos_filter and selected_positions else "")
+        ui.subsection(f"{len(batting):,} batters{_pos_note}")
     with col_dl:
-        st.download_button("⬇️ CSV", batting.to_csv(index=False), key="dl_1", file_name="batting_stats.csv", mime="text/csv")
-    st.dataframe(batting, use_container_width=True, height=500)
+        st.download_button("Download CSV", batting.to_csv(index=False), key="dl_1", file_name="batting_stats.csv",
+                           mime="text/csv", icon=":material/download:", width="stretch")
+    ui.table(batting, height=520, bar=sort_by_bat if sort_by_bat in ("runs", "hundreds", "fifties", "innings") else "runs")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2 — BOWLING
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.subheader("🎳 Bowling Statistics")
+    ui.lede("Wickets, economy and strike rates. For economy, average and strike rate, lower is better.")
 
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        min_overs = st.number_input("Min Overs", min_value=1, value=5, step=1, key="min_ovs")
-        sort_by_bowl = st.selectbox("Sort By", ["wickets", "economy", "average", "bowling_sr", "overs"], key="sort_bowl")
+        min_overs = st.number_input("Minimum overs", min_value=1, value=5, step=1, key="min_ovs")
     with col2:
-        use_over_filter = st.toggle("🎯 Filter by Over Number", value=False)
+        sort_by_bowl = st.selectbox("Sort by", ["wickets", "economy", "average", "bowling_sr", "overs"],
+                                    key="sort_bowl", format_func=ui.nice_label)
+    with col3:
+        ui.spacer()
+        use_over_filter = st.toggle("Only certain overs", value=False)
         if use_over_filter:
             # Detect max overs from data
             max_over = 20  # default T20
@@ -551,9 +614,9 @@ with tab2:
                     max_over = 20
             # Over phase presets
             phase = st.radio(
-                "Phase Preset",
+                "Phase",
                 ["Custom", "Powerplay (1-6)", "Middle (7-15)", "Death (16-20)"],
-                horizontal=False,
+                horizontal=True,
             )
             if phase == "Powerplay (1-6)":
                 selected_overs = list(range(1, 7))
@@ -563,7 +626,7 @@ with tab2:
                 selected_overs = list(range(16, 21))
             else:
                 selected_overs = st.multiselect(
-                    "Select Over(s)",
+                    "Overs",
                     options=list(range(1, max_over + 1)),
                     default=[1, 2, 3, 4, 5, 6],
                     format_func=lambda x: f"Over {x}",
@@ -593,23 +656,21 @@ with tab2:
     bowling = bowling.sort_values(sort_by_bowl, ascending=sort_by_bowl in ["economy", "average", "bowling_sr"]).reset_index(drop=True)
     bowling.index += 1
 
-    if use_over_filter and selected_overs:
-        st.caption(f"🎯 Stats for overs: {', '.join(map(str, sorted(selected_overs)))}")
-
-    col_th, col_dl = st.columns([6,1])
+    col_th, col_dl = st.columns([5, 1], vertical_alignment="bottom")
     with col_th:
-        st.markdown(f"**Bowlers** — {len(bowling)} players")
+        _ov_note = (f", overs {', '.join(map(str, sorted(selected_overs)))}"
+                    if use_over_filter and selected_overs else "")
+        ui.subsection(f"{len(bowling):,} bowlers{_ov_note}")
     with col_dl:
-        st.download_button("⬇️ CSV", bowling.to_csv(index=False), key="dl_2", file_name="bowling_stats.csv", mime="text/csv")
-    st.dataframe(bowling, use_container_width=True, height=500)
+        st.download_button("Download CSV", bowling.to_csv(index=False), key="dl_2", file_name="bowling_stats.csv",
+                           mime="text/csv", icon=":material/download:", width="stretch")
+    ui.table(bowling, height=520, bar="wickets")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — PLAYER OF MATCH ANALYSIS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    import plotly.express as px
-
-    st.subheader("🏅 Player of the Match Analysis")
+    ui.lede("Who wins the awards, against whom, and where.")
 
     filtered_match_ids = set(final_matches["match_id"].tolist())
     match_detail = _cache["match_stats"].copy()
@@ -621,11 +682,11 @@ with tab3:
 
     # For/Against toggle when team selected
     if selected_main_team:
-        pom_mode = st.radio(
-            "Show awards:",
-            ["🏆 For (team players)", "⚔️ Against (opposition)", "📋 All"],
-            horizontal=True, key="pom_mode"
-        )
+        pom_mode = st.segmented_control(
+            "Show awards won",
+            ["For the team", "Against the team", "All"],
+            default="For the team", key="pom_mode",
+        ) or "All"
         team_players = valid_team_players or set()
         if "For" in pom_mode:
             match_detail = match_detail[match_detail["player_of_match"].isin(team_players)]
@@ -633,30 +694,17 @@ with tab3:
             match_detail = match_detail[~match_detail["player_of_match"].isin(team_players)]
 
     if match_detail.empty:
-        st.info("No Player of the Match data for current selection.")
+        st.info("No player of the match awards in the matches you've selected. Widen the filters to see some.")
         st.stop()
 
     # ── 1. Overall leaderboard ────────────────────────────────────────────────
-    st.subheader("🥇 Overall Leaderboard")
+    ui.subsection("Leaderboard")
     pom_counts = (
         match_detail["player_of_match"]
         .value_counts()
         .reset_index()
     )
     pom_counts.columns = ["player", "awards"]
-    # Matches played — from filtered deliveries (respects season)
-    total_matches_pp = (
-        final_deliveries.groupby("striker")["match_id"].nunique()
-        .reset_index().rename(columns={"striker":"player","match_id":"matches_played"})
-    )
-    pom_table = pom_counts.merge(total_matches_pp, on="player", how="left")
-    pom_table["matches_played"]  = pom_table["matches_played"].fillna(0).astype(int)
-    pom_table["matches_per_award"] = (pom_table["matches_played"] / pom_table["awards"].replace(0,1)).round(1)
-    pom_table = pom_table.rename(columns={
-        "player":"Player","awards":"Awards",
-        "matches_played":"Matches","matches_per_award":"Matches/Award"
-    })
-    pom_table.index = range(1, len(pom_table)+1)
     pom_counts.index   = range(1, len(pom_counts) + 1)
 
     # Enrich pom_counts with matches played and award rate
@@ -669,29 +717,30 @@ with tab3:
     pom_table["award_per_match"] = (pom_table["matches_played"] / pom_table["awards"].replace(0,1)).round(1)
     pom_table = pom_table.rename(columns={
         "player":"Player","awards":"Awards",
-        "matches_played":"Matches","award_per_match":"Matches/Award"
+        "matches_played":"Matches","award_per_match":"Matches per award"
     })
     pom_table.index = range(1, len(pom_table)+1)
-    st.dataframe(pom_table, use_container_width=True, height=450)
+
+    lb_l, lb_r = st.columns([3, 2])
+    with lb_l:
+        ui.table(pom_table, height=460, bar="Awards")
+    with lb_r:
+        ui.show(ui.bar(pom_counts.head(10), "player", "awards", title="Most awards",
+                       horizontal=True, height=460))
 
     # ── 2. Player drill-down ──────────────────────────────────────────────────
-    st.subheader("🔍 Player Deep Dive")
+    st.divider()
+    ui.section("One player's awards")
     player_list = pom_counts["player"].tolist()
     selected_pom_player = st.selectbox(
-        "Select a player to see all their MOM details",
+        "Player",
         options=[None] + player_list,
-        format_func=lambda x: "— Select player —" if x is None else x,
+        format_func=lambda x: "Choose a player" if x is None else x,
         key="pom_player_select"
     )
 
     if selected_pom_player:
         player_awards = match_detail[match_detail["player_of_match"] == selected_pom_player].copy()
-
-        # Determine opponent for each match
-        def get_opponent(row, player_team_map):
-            t = player_team_map.get(row["match_id"])
-            if t is None: return "Unknown"
-            return row["team2"] if row["team1"] == t else row["team1"]
 
         # 4-source team lookup for selected player
         _bat   = final_deliveries[final_deliveries["striker"]      == selected_pom_player][["match_id","batting_team"]].drop_duplicates("match_id").rename(columns={"batting_team":"t"})
@@ -708,85 +757,72 @@ with tab3:
         )
 
         total = len(player_awards)
-        st.markdown(f"**{selected_pom_player}** has won **{total}** Player of the Match award{'s' if total != 1 else ''}")
 
         # KPI row
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Total Awards", total)
+        k1.metric("Awards", total)
         if "opponent" in player_awards.columns:
             best_opp = player_awards["opponent"].value_counts().idxmax() if not player_awards["opponent"].empty else "—"
-            k2.metric("Most vs", best_opp)
+            k2.metric("Most against", best_opp)
         if "venue" in player_awards.columns:
             best_venue = player_awards["venue"].value_counts().idxmax() if not player_awards["venue"].empty else "—"
-            k3.metric("Best Venue", best_venue[:20] + "..." if len(str(best_venue)) > 20 else best_venue)
+            k3.metric("Best venue", best_venue[:20] + "..." if len(str(best_venue)) > 20 else best_venue,
+                      help=str(best_venue))
         if "season" in player_awards.columns:
             best_season = player_awards["season"].value_counts().idxmax() if not player_awards["season"].empty else "—"
-            k4.metric("Best Season", best_season)
+            k4.metric("Best season", best_season)
 
         col_a, col_b, col_c = st.columns(3)
+        vs_opp = vs_venue = vs_season = None
 
         # vs each opponent
         with col_a:
-            st.markdown("**🆚 Awards vs Each Team**")
             if "opponent" in player_awards.columns:
                 vs_opp = player_awards["opponent"].value_counts().reset_index()
                 vs_opp.columns = ["opponent","awards"]
                 vs_opp.index += 1
-                st.dataframe(vs_opp, use_container_width=True, height=300)
-                fig_opp = px.bar(vs_opp, x="opponent", y="awards",
-                                 color="awards", color_continuous_scale=["#1a3550","#1DB954"],
-                                 text="awards")
-                fig_opp.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                      font_color="white", coloraxis_showscale=False)
-                fig_opp.update_traces(textposition="outside")
-                st.plotly_chart(fig_opp, use_container_width=True, key=_next_key())
+                ui.show(ui.bar(vs_opp, "opponent", "awards", title="Against each team",
+                               horizontal=True, height=340))
 
         # at each venue
         with col_b:
-            st.markdown("**📍 Awards at Each Venue**")
             if "venue" in player_awards.columns:
                 vs_venue = player_awards["venue"].value_counts().reset_index()
                 vs_venue.columns = ["venue","awards"]
                 vs_venue.index += 1
-                st.dataframe(vs_venue, use_container_width=True, height=300)
-                fig_ven = px.bar(vs_venue, x="venue", y="awards",
-                                 color="awards", color_continuous_scale=["#1a3550","#00b4d8"],
-                                 text="awards")
-                fig_ven.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                      font_color="white", coloraxis_showscale=False)
-                fig_ven.update_traces(textposition="outside")
-                st.plotly_chart(fig_ven, use_container_width=True, key=_next_key())
+                ui.show(ui.bar(vs_venue, "venue", "awards", title="At each venue",
+                               horizontal=True, color=ui.SKY, height=340))
 
         # per season
         with col_c:
-            st.markdown("**📅 Awards per Season**")
             if "season" in player_awards.columns:
                 vs_season = player_awards["season"].value_counts().reset_index()
                 vs_season.columns = ["season","awards"]
                 vs_season = vs_season.sort_values("season").reset_index(drop=True)
                 vs_season.index += 1
-                st.dataframe(vs_season, use_container_width=True, height=300)
-                fig_sea = px.bar(vs_season, x="season", y="awards",
-                                 color="awards", color_continuous_scale=["#1a3550","#f59e0b"],
-                                 text="awards")
-                fig_sea.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                      font_color="white", coloraxis_showscale=False)
-                fig_sea.update_traces(textposition="outside")
-                st.plotly_chart(fig_sea, use_container_width=True, key=_next_key())
+                ui.show(ui.bar(vs_season, "season", "awards", title="By season",
+                               color=ui.VIOLET, height=340))
+
+        with st.expander("See these as tables", icon=":material/table:"):
+            t_a, t_b, t_c = st.columns(3)
+            with t_a:
+                if vs_opp is not None:
+                    ui.table(vs_opp, height=300)
+            with t_b:
+                if vs_venue is not None:
+                    ui.table(vs_venue, height=300)
+            with t_c:
+                if vs_season is not None:
+                    ui.table(vs_season, height=300)
 
         # ── Full match log ────────────────────────────────────────────────────
-        st.subheader(f"📋 All {selected_pom_player} MOM Matches")
+        ui.subsection(f"Every match {selected_pom_player} was player of the match")
         safe_cols = [c for c in ["date","season","event","venue","team1","team2",
                                   "opponent","winner","toss_winner","toss_decision"] if c in player_awards.columns]
-        st.dataframe(
+        ui.table(
             player_awards[safe_cols].sort_values("date", ascending=False).reset_index(drop=True),
-            use_container_width=True, height=400
+            height=400, hide_index=True,
         )
-
-    st.divider()
 
     # ── Build enriched MOM dataframe with opponent + team ─────────────────────
     # Get player's team per match from deliveries (safe — no merge issues)
@@ -841,24 +877,11 @@ with tab3:
     )
 
     st.divider()
-
-    # ── helper: small styled bar chart ───────────────────────────────────────
-    def _mini_bar(df, x, y, color):
-        f = px.bar(df, x=x, y=y, color=y,
-                   color_continuous_scale=["#1a3550", color],
-                   text=y)
-        f.update_layout(showlegend=False, xaxis_tickangle=-35,
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        font_color="white", coloraxis_showscale=False,
-                        margin=dict(t=10,b=10,l=0,r=0))
-        f.update_traces(textposition="outside")
-        return f
+    ui.section("Top five, split three ways",
+               "The five players with the most awards for each team, against each team, and at each venue.")
+    mom_for_tab, mom_against_tab, mom_venue_tab = st.tabs(["For each team", "Against each team", "At each venue"])
 
     # ── 3. Most MOM FOR each team (top 5 players per team) ───────────────────
-    st.subheader("🏆 Most MOM — For Each Team (Top 5 Players)")
-    st.caption("Top 5 players with most MOM awards while playing FOR each team")
-
     if "pom_team" in pom_enriched.columns:
         teams_sorted = (
             pom_enriched["pom_team"].dropna().value_counts()
@@ -884,13 +907,10 @@ with tab3:
                 pivot_for.append(row)
             pivot_for_df = pd.DataFrame(pivot_for).fillna("—")
             pivot_for_df.index += 1
-            st.dataframe(pivot_for_df, use_container_width=True, height=320)
+            with mom_for_tab:
+                ui.table(pivot_for_df, height=340)
 
     # ── 4. Most MOM AGAINST each team (top 5 players) ────────────────────────
-    st.divider()
-    st.subheader("⚔️ Most MOM — Against Each Team (Top 5 Players)")
-    st.caption("Top 5 players with most MOM awards when playing AGAINST each team")
-
     if "opponent" in pom_enriched.columns:
         opp_sorted = (
             pom_enriched["opponent"].dropna().value_counts()
@@ -915,13 +935,10 @@ with tab3:
                 pivot_ag.append(row)
             pivot_ag_df = pd.DataFrame(pivot_ag).fillna("—")
             pivot_ag_df.index += 1
-            st.dataframe(pivot_ag_df, use_container_width=True, height=320)
+            with mom_against_tab:
+                ui.table(pivot_ag_df, height=340)
 
     # ── 5. Most MOM at each venue (top 5 players) ────────────────────────────
-    st.divider()
-    st.subheader("📍 Most MOM — At Each Venue (Top 5 Players)")
-    st.caption("Top 5 players with most MOM awards at each venue")
-
     if "venue" in pom_enriched.columns:
         venues_sorted = (
             pom_enriched["venue"].dropna().value_counts()
@@ -946,22 +963,22 @@ with tab3:
                 pivot_v.append(row)
             pivot_v_df = pd.DataFrame(pivot_v).fillna("—")
             pivot_v_df.index += 1
-            st.dataframe(pivot_v_df, use_container_width=True, height=320)
+            with mom_venue_tab:
+                ui.table(pivot_v_df, height=340)
 
     st.download_button(
-        "⬇️ Download MOM Data CSV",
+        "Download award counts (CSV)",
         pom_counts.to_csv(index=False),
         file_name="player_of_match.csv",
         key="dl_3",
         mime="text/csv",
+        icon=":material/download:",
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 4 — TEAM STATS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    import plotly.express as px
-
     # Active teams for filtering
     active_teams = set()
     if "team1" in final_matches.columns: active_teams.update(final_matches["team1"].dropna().unique())
@@ -971,23 +988,42 @@ with tab4:
     all_team_list = sorted(active_teams) if active_teams else sorted(
         list(deliveries_df["batting_team"].dropna().unique())
     )
+    ui.lede("Results for every side. Pick one team to open its full breakdown.")
     dashboard_team = st.selectbox(
-        "🔍 Select a team for detailed dashboard (optional)",
+        "Team breakdown",
         options=[None] + all_team_list,
-        format_func=lambda x: "— View all teams overview —" if x is None else x,
+        format_func=lambda x: "All teams" if x is None else x,
         key="dashboard_team"
     )
 
     # ── OVERVIEW — shown always ───────────────────────────────────────────────
-    st.subheader("🏆 Team Performance Overview")
     # Recompute from filtered matches (respects season/event/team filters)
     team_stats = get_team_stats(final_matches)
-    st.dataframe(team_stats, use_container_width=True, height=350)
+    if not team_stats.empty:
+        ov_l, ov_r = st.columns([3, 2])
+        with ov_l:
+            ui.subsection("Results")
+            ui.table(team_stats, height=400, hide_index=True, bar="win_%")
+        with ov_r:
+            _ts = team_stats.sort_values("win_%", ascending=False)
+            _fig = ui.bar(_ts, "team", "win_%", title="Win %", horizontal=True,
+                          colors=ui.win_colors(_ts["win_%"]), height=400)
+            _fig.add_vline(x=50, line_dash="dot", line_color=ui.MUTED, line_width=1)
+            ui.show(_fig)
+        st.caption("Blue bars win half their matches or more; red bars win fewer than half.")
+        st.download_button(
+            "Download team results (CSV)",
+            team_stats.to_csv(index=False),
+            file_name="team_stats.csv",
+            key="dl_7",
+            mime="text/csv",
+            icon=":material/download:",
+        )
 
     # ── TEAM DASHBOARD — shown when team selected ─────────────────────────────
     if dashboard_team:
         st.divider()
-        st.subheader(f"📊 {dashboard_team} — Full Team Dashboard")
+        ui.section(dashboard_team, "Everything below is for this team only, within your filters.")
 
         # Filter deliveries and matches for this team
         tm_bat_del  = final_deliveries[final_deliveries["batting_team"]  == dashboard_team]
@@ -1008,71 +1044,55 @@ with tab4:
         k1.metric("Matches", tm_played)
         k2.metric("Won", tm_won)
         k3.metric("Win %", f"{tm_winpct}%")
-        k4.metric("Runs Scored", f"{tm_runs:,}")
-        k5.metric("Wickets Taken", f"{tm_wkts:,}")
-
-        st.divider()
+        k4.metric("Runs scored", f"{tm_runs:,}")
+        k5.metric("Wickets taken", f"{tm_wkts:,}")
 
         # ── SUB TABS ──────────────────────────────────────────────────────────
         t1, t2, t3, t4, t5 = st.tabs([
-            "🏏 Top Batters",
-            "🎳 Top Bowlers",
-            "📍 Venue Stats",
-            "🆚 vs Each Team",
-            "🪙 Toss & Bat Order",
+            "Batters",
+            "Bowlers",
+            "Venues",
+            "Head to head",
+            "Toss and batting order",
         ])
 
         # ── TOP BATTERS ───────────────────────────────────────────────────────
         with t1:
-            st.subheader(f"🏏 Top Run Scorers — {dashboard_team}")
             tm_bat_stats = get_batting_stats(tm_bat_del.reset_index(drop=True), min_innings=1)
             tm_bat_stats = tm_bat_stats.sort_values("runs", ascending=False).reset_index(drop=True)
             tm_bat_stats.index += 1
 
             col1, col2 = st.columns([3, 2])
             with col1:
-                st.dataframe(tm_bat_stats, use_container_width=True, height=450)
+                ui.subsection(f"Run scorers for {dashboard_team}")
+                ui.table(tm_bat_stats, height=460, bar="runs")
             with col2:
-                top10 = tm_bat_stats.head(10)
-                fig = px.bar(top10, x="player", y="runs", color="runs",
-                             color_continuous_scale=["#1a3550","#1DB954"],
-                             text="runs", title="Top 10 Run Scorers")
-                fig.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                  plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  font_color="white", coloraxis_showscale=False)
-                fig.update_traces(textposition="outside")
-                st.plotly_chart(fig, use_container_width=True, key=_next_key())
+                ui.subsection("Top 10")
+                ui.show(ui.bar(tm_bat_stats.head(10), "player", "runs", horizontal=True, height=460))
 
-            st.download_button("⬇️ Download Batting CSV",
-                tm_bat_stats.to_csv(index=False), file_name=f"{dashboard_team}_batting.csv")
+            st.download_button("Download batting CSV", tm_bat_stats.to_csv(index=False),
+                               file_name=f"{dashboard_team}_batting.csv", icon=":material/download:")
 
         # ── TOP BOWLERS ───────────────────────────────────────────────────────
         with t2:
-            st.subheader(f"🎳 Top Wicket Takers — {dashboard_team}")
             tm_bowl_stats = get_bowling_stats(tm_bowl_del.reset_index(drop=True), min_overs=1)
             tm_bowl_stats = tm_bowl_stats.sort_values("wickets", ascending=False).reset_index(drop=True)
             tm_bowl_stats.index += 1
 
             col1, col2 = st.columns([3, 2])
             with col1:
-                st.dataframe(tm_bowl_stats, use_container_width=True, height=450)
+                ui.subsection(f"Wicket takers for {dashboard_team}")
+                ui.table(tm_bowl_stats, height=460, bar="wickets")
             with col2:
-                top10b = tm_bowl_stats.head(10)
-                fig2 = px.bar(top10b, x="player", y="wickets", color="wickets",
-                              color_continuous_scale=["#1a3550","#00b4d8"],
-                              text="wickets", title="Top 10 Wicket Takers")
-                fig2.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                   font_color="white", coloraxis_showscale=False)
-                fig2.update_traces(textposition="outside")
-                st.plotly_chart(fig2, use_container_width=True, key=_next_key())
+                ui.subsection("Top 10")
+                ui.show(ui.bar(tm_bowl_stats.head(10), "player", "wickets", horizontal=True,
+                               color=ui.VIOLET, height=460))
 
-            st.download_button("⬇️ Download Bowling CSV",
-                tm_bowl_stats.to_csv(index=False), file_name=f"{dashboard_team}_bowling.csv")
+            st.download_button("Download bowling CSV", tm_bowl_stats.to_csv(index=False),
+                               file_name=f"{dashboard_team}_bowling.csv", icon=":material/download:")
 
         # ── VENUE STATS ───────────────────────────────────────────────────────
         with t3:
-            st.subheader(f"📍 Venue Performance — {dashboard_team}")
             if "venue" in tm_matches.columns:
                 venue_df = tm_matches.copy()
                 venue_df["won"] = (venue_df["winner"] == dashboard_team).astype(int)
@@ -1088,15 +1108,12 @@ with tab4:
 
                 col1, col2 = st.columns([2, 3])
                 with col1:
-                    st.dataframe(venue_stats, use_container_width=True, height=400)
+                    ui.subsection("Record at each ground")
+                    ui.table(venue_stats, height=420, bar="win_%")
                 with col2:
-                    fig3 = px.bar(venue_stats, x="venue", y=["won","lost"],
-                                  barmode="stack",
-                                  color_discrete_map={"won":"#1DB954","lost":"#e63946"},
-                                  title="Won vs Lost at each Venue")
-                    fig3.update_layout(xaxis_tickangle=-35, plot_bgcolor="rgba(0,0,0,0)",
-                                       paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    st.plotly_chart(fig3, use_container_width=True, key=_next_key())
+                    ui.subsection("Won and lost")
+                    ui.show(ui.stacked_bar(venue_stats, "venue", {"won": ui.WIN, "lost": ui.LOSS},
+                                           horizontal=True, height=420))
 
                 # Runs at each venue
                 if "venue" in tm_bat_del.columns:
@@ -1105,15 +1122,14 @@ with tab4:
                         .agg(runs=("runs_off_bat","sum"), balls=("wides","count"))
                         .reset_index()
                     )
-                    st.markdown("**Runs Scored at Each Venue**")
-                    st.dataframe(v_runs.sort_values("runs", ascending=False).reset_index(drop=True),
-                                 use_container_width=True, height=250)
+                    ui.subsection("Runs scored at each ground")
+                    ui.table(v_runs.sort_values("runs", ascending=False).reset_index(drop=True),
+                             height=280, hide_index=True, bar="runs")
             else:
-                st.info("Venue data not available.")
+                st.info("This data has no venue column, so there's no ground-by-ground record.")
 
         # ── VS EACH TEAM ──────────────────────────────────────────────────────
         with t4:
-            st.subheader(f"🆚 {dashboard_team} vs Each Opponent")
             vs_df = tm_matches.copy()
             vs_df["opponent"] = vs_df.apply(
                 lambda r: r["team2"] if r["team1"] == dashboard_team else r["team1"], axis=1
@@ -1132,88 +1148,73 @@ with tab4:
 
             col1, col2 = st.columns([2, 3])
             with col1:
-                st.dataframe(vs_stats, use_container_width=True, height=400)
+                ui.subsection(f"{dashboard_team} against each side")
+                ui.table(vs_stats, height=420)
             with col2:
-                fig4 = px.bar(vs_stats, x="opponent", y="win_%",
-                              color="win_%",
-                              color_continuous_scale=["#e63946","#f59e0b","#1DB954"],
-                              text="win_%", title="Win % vs Each Opponent")
-                fig4.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                   font_color="white", coloraxis_showscale=False)
-                fig4.update_traces(textposition="outside")
-                st.plotly_chart(fig4, use_container_width=True, key=_next_key())
+                ui.subsection("Win %")
+                _vs = vs_stats.sort_values("win_%", ascending=False)
+                _fig4 = ui.bar(_vs, "opponent", "win_%", horizontal=True,
+                               colors=ui.win_colors(_vs["win_%"]), height=420)
+                _fig4.add_vline(x=50, line_dash="dot", line_color=ui.MUTED, line_width=1)
+                ui.show(_fig4)
 
-            st.download_button("⬇️ Download vs Teams CSV",
-                vs_stats.to_csv(index=False), file_name=f"{dashboard_team}_vs_teams.csv")
+            st.download_button("Download head-to-head CSV", vs_stats.to_csv(index=False),
+                               file_name=f"{dashboard_team}_vs_teams.csv", icon=":material/download:")
 
         # ── TOSS & BAT ORDER ─────────────────────────────────────────────────
         with t5:
             col1, col2 = st.columns(2)
             with col1:
-                st.subheader("🪙 Toss Analysis")
+                ui.subsection("After winning the toss")
                 toss_tm = get_toss_stats(final_matches)
                 toss_tm = toss_tm[toss_tm["toss_winner"] == dashboard_team]
                 if not toss_tm.empty:
-                    st.dataframe(toss_tm, use_container_width=True)
-                    fig5 = px.pie(
-                        toss_tm, values="toss_wins",
-                        names="toss_winner",
-                        title="Toss Decisions",
-                        color_discrete_sequence=["#1DB954","#00b4d8"]
-                    )
-                    fig5.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    st.plotly_chart(fig5, use_container_width=True, key=_next_key())
+                    ui.table(toss_tm, hide_index=True)
+                    _tw = int(toss_tm["toss_wins"].iloc[0])
+                    _mw = int(toss_tm["match_wins"].iloc[0])
+                    _toss_split = pd.DataFrame({
+                        "result": ["Won the match", "Lost or no result"],
+                        "matches": [_mw, max(_tw - _mw, 0)],
+                    })
+                    ui.show(ui.donut(_toss_split, "result", "matches",
+                                     title=f"{_tw} tosses won", colors=[ui.WIN, ui.LOSS]))
 
             with col2:
-                st.subheader("🏏 Bat First vs Second")
+                ui.subsection("Batting first or chasing")
                 bat_ord_tm = get_batting_order_stats(final_matches.reset_index(drop=True), final_deliveries.reset_index(drop=True))
                 bat_ord_tm = bat_ord_tm[bat_ord_tm["team"] == dashboard_team]
                 if not bat_ord_tm.empty:
-                    st.dataframe(bat_ord_tm, use_container_width=True)
+                    ui.table(bat_ord_tm, hide_index=True)
                     melt_tm = bat_ord_tm[["team","win%_bat_first","win%_bat_second"]].melt(
                         id_vars="team", var_name="method", value_name="win_%"
                     )
                     melt_tm["method"] = melt_tm["method"].map({
-                        "win%_bat_first":"Bat First","win%_bat_second":"Bat Second"
+                        "win%_bat_first":"Batting first","win%_bat_second":"Chasing"
                     })
-                    fig6 = px.bar(melt_tm, x="method", y="win_%",
-                                  color="method",
-                                  color_discrete_map={"Bat First":"#1DB954","Bat Second":"#00b4d8"},
-                                  text="win_%", title="Win % by Innings")
-                    fig6.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                                       paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    fig6.update_traces(textposition="outside")
-                    st.plotly_chart(fig6, use_container_width=True, key=_next_key())
+                    ui.show(ui.bar(melt_tm, "method", "win_%", title="Win %",
+                                   colors=[ui.AMBER, ui.SKY], height=340))
 
     else:
         # ── OVERVIEW CHARTS (no team selected) ───────────────────────────────
-        st.subheader("🏏 Batting First vs Batting Second")
-        bat_order = get_batting_order_stats(final_matches.reset_index(drop=True), final_deliveries.reset_index(drop=True))
-        st.caption("Win records when batting first vs chasing")
-        st.dataframe(bat_order, use_container_width=True, height=350)
+        st.divider()
+        bo_l, bo_r = st.columns(2)
+        with bo_l:
+            ui.subsection("Batting first or chasing")
+            st.caption("Each team's record when setting a target and when chasing one")
+            bat_order = get_batting_order_stats(final_matches.reset_index(drop=True), final_deliveries.reset_index(drop=True))
+            ui.table(bat_order, height=380, hide_index=True)
+        with bo_r:
+            ui.subsection("Does winning the toss help?")
+            st.caption("How often each team went on to win after calling correctly")
+            toss = get_toss_stats(final_matches)
+            ui.table(toss, height=380, hide_index=True, bar="win_after_toss_%")
 
-    
-
-        st.subheader("🪙 Toss Analysis")
-        toss = get_toss_stats(final_matches)
-        st.dataframe(toss, use_container_width=True)
-
-    st.download_button(
-        "⬇️ Download Team Stats CSV",
-        team_stats.to_csv(index=False),
-        file_name="team_stats.csv",
-        key="dl_7",
-        mime="text/csv",
-    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 5 — LEAGUE ANALYSIS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab5:
-    import plotly.express as px
-    st.subheader("📊 League Analysis")
-    st.caption("Aggregated league-wide trends across all filtered matches")
+    ui.lede("How games are played across every match in your selection.")
 
     # ── Prepare phase-level data ──────────────────────────────────────────────
     del_df = final_deliveries.copy().reset_index(drop=True)
@@ -1257,17 +1258,21 @@ with tab5:
     inn2 = inn_agg[pd.to_numeric(inn_agg["innings"], errors="coerce") == 2]
 
     # ── KPI Row ───────────────────────────────────────────────────────────────
-    st.subheader("🏏 Innings Averages")
+    ui.subsection("Innings scores")
     c1,c2,c3,c4,c5,c6 = st.columns(6)
-    c1.metric("Avg 1st Inn Score",   f"{inn1['runs'].mean():.1f}"  if not inn1.empty else "—")
-    c2.metric("Avg 1st Inn (Wins)",  f"{inn1[inn1['won']]['runs'].mean():.1f}" if not inn1[inn1["won"]].empty else "—")
-    c3.metric("Avg 2nd Inn Score",   f"{inn2['runs'].mean():.1f}"  if not inn2.empty else "—")
-    c4.metric("Avg 2nd Inn (Wins)",  f"{inn2[inn2['won']]['runs'].mean():.1f}" if not inn2[inn2["won"]].empty else "—")
-    c5.metric("Highest 1st Inn",     f"{int(inn1['runs'].max())}"  if not inn1.empty else "—")
-    c6.metric("Lowest 1st Inn",      f"{int(inn1['runs'].min())}"  if not inn1.empty else "—")
+    c1.metric("Avg 1st inns",     f"{inn1['runs'].mean():.1f}"  if not inn1.empty else "—",
+              help="Average first-innings total")
+    c2.metric("Avg 1st inns, won", f"{inn1[inn1['won']]['runs'].mean():.1f}" if not inn1[inn1["won"]].empty else "—",
+              help="Average first-innings total when the side batting first won")
+    c3.metric("Avg 2nd inns",     f"{inn2['runs'].mean():.1f}"  if not inn2.empty else "—",
+              help="Average second-innings total")
+    c4.metric("Avg 2nd inns, won", f"{inn2[inn2['won']]['runs'].mean():.1f}" if not inn2[inn2["won"]].empty else "—",
+              help="Average second-innings total when the chasing side won")
+    c5.metric("Highest 1st inns", f"{int(inn1['runs'].max())}"  if not inn1.empty else "—")
+    c6.metric("Lowest 1st inns",  f"{int(inn1['runs'].min())}"  if not inn1.empty else "—")
 
     st.divider()
-    st.subheader("🎯 Phase-wise Analysis (All Matches)")
+    ui.section("Phase by phase", "Powerplay, middle and death overs. Every value is per innings.")
 
     phase_agg = (
         del_df[del_df["phase"].notna()]
@@ -1295,58 +1300,34 @@ with tab5:
     phase_agg["run_rate"]          = (phase_agg["total_runs"]  / phase_agg["total_balls"] * 6).round(2).where(phase_agg["total_balls"]>0, 0)
     phase_agg["balls_per_wicket"]  = (phase_agg["total_balls"] / phase_agg["total_wkts"]).round(1).where(phase_agg["total_wkts"]>0, 0)
 
-    col1, col2 = st.columns(2)
+    _phase_cols = [ui.PHASE_COLORS.get(str(p), ui.MUTED) for p in phase_agg["phase"]]
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("**💨 Avg Runs per Innings by Phase**")
-        fig_pr = px.bar(phase_agg, x="phase", y="avg_runs_per_inn",
-                        color="phase",
-                        color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="avg_runs_per_inn")
-        fig_pr.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig_pr.update_traces(textposition="outside")
-        st.plotly_chart(fig_pr, use_container_width=True, key=_next_key())
+        ui.show(ui.bar(phase_agg, "phase", "avg_runs_per_inn", title="Runs per innings",
+                       colors=_phase_cols, height=340))
     with col2:
-        st.markdown("**🎳 Avg Wickets per Innings by Phase**")
-        fig_pw = px.bar(phase_agg, x="phase", y="avg_wkts_per_inn",
-                        color="phase",
-                        color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="avg_wkts_per_inn")
-        fig_pw.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig_pw.update_traces(textposition="outside")
-        st.plotly_chart(fig_pw, use_container_width=True, key=_next_key())
-
-    col3, col4 = st.columns(2)
+        ui.show(ui.bar(phase_agg, "phase", "avg_wkts_per_inn", title="Wickets per innings",
+                       colors=_phase_cols, height=340))
     with col3:
-        st.markdown("**📈 Run Rate by Phase**")
-        fig_rr = px.bar(phase_agg, x="phase", y="run_rate",
-                        color="phase",
-                        color_discrete_sequence=["#1DB954","#00b4d8","#e63946"],
-                        text="run_rate")
-        fig_rr.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                              paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig_rr.update_traces(textposition="outside")
-        st.plotly_chart(fig_rr, use_container_width=True, key=_next_key())
+        ui.show(ui.bar(phase_agg, "phase", "run_rate", title="Run rate",
+                       colors=_phase_cols, height=340))
 
-
-    st.caption("All values are **per innings** — PP avg ~54 runs is correct for T20")
     # Phase table
-    st.dataframe(
+    ui.table(
         phase_agg[["phase","avg_runs_per_inn","run_rate","avg_wkts_per_inn","balls_per_wicket"]]
         .rename(columns={
             "phase":"Phase",
-            "avg_runs_per_inn":"Avg Runs/Inn",
-            "run_rate":"Run Rate",
-            "avg_wkts_per_inn":"Avg Wkts/Inn",
-            "balls_per_wicket":"Balls/Wicket",
+            "avg_runs_per_inn":"Runs per innings",
+            "run_rate":"Run rate",
+            "avg_wkts_per_inn":"Wickets per innings",
+            "balls_per_wicket":"Balls per wicket",
         }),
-        use_container_width=True, hide_index=True
+        hide_index=True
     )
 
     # ── Over-by-over run rate ─────────────────────────────────────────────────
     st.divider()
-    st.subheader("📉 Over-by-Over Run Rate")
+    ui.section("Over by over", "Dotted lines mark the end of the powerplay and the middle overs.")
     over_agg = (
         del_df[del_df["over_num"].between(1,20)]
         .groupby("over_num")
@@ -1364,57 +1345,40 @@ with tab5:
 
     col1, col2 = st.columns(2)
     with col1:
-        fig_or = px.line(over_agg, x="over_num", y="run_rate", markers=True,
-                         color_discrete_sequence=["#1DB954"],
-                         labels={"over_num":"Over","run_rate":"Run Rate"},
-                         title="Run Rate per Over")
-        fig_or.add_vline(x=6.5,  line_dash="dash", line_color="#8b949e", annotation_text="PP end")
-        fig_or.add_vline(x=15.5, line_dash="dash", line_color="#8b949e", annotation_text="Middle end")
-        fig_or.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_or, use_container_width=True, key=_next_key())
+        fig_or = ui.line(over_agg, "over_num", "run_rate", title="Run rate in each over",
+                         labels={"over_num": "Over", "run_rate": "Run rate"},
+                         vlines=[(6.5, "Powerplay ends"), (15.5, "Death overs")], height=360)
+        fig_or.update_xaxes(dtick=1)
+        ui.show(fig_or)
     with col2:
-        fig_ow = px.bar(over_agg, x="over_num", y="avg_wkts",
-                        color="avg_wkts",
-                        color_continuous_scale=["#1a3550","#e63946"],
-                        labels={"over_num":"Over","avg_wkts":"Avg Wickets"},
-                        title="Avg Wickets per Over")
-        fig_ow.add_vline(x=6.5,  line_dash="dash", line_color="#8b949e")
-        fig_ow.add_vline(x=15.5, line_dash="dash", line_color="#8b949e")
-        fig_ow.update_layout(showlegend=False, coloraxis_showscale=False,
-                             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig_ow, use_container_width=True, key=_next_key())
+        fig_ow = ui.bar(over_agg, "over_num", "avg_wkts", title="Wickets in each over, per match",
+                        color=ui.RED, show_values=False, height=360,
+                        labels={"over_num": "Over", "avg_wkts": "Wickets per match"})
+        fig_ow.add_vline(x=5.5,  line_dash="dot", line_color=ui.MUTED, line_width=1)
+        fig_ow.add_vline(x=14.5, line_dash="dot", line_color=ui.MUTED, line_width=1)
+        ui.show(fig_ow)
 
     # ── Toss & Venue ──────────────────────────────────────────────────────────
     st.divider()
-    st.subheader("🪙 Toss Impact & Venue Trends")
+    ui.section("Grounds", "Average first-innings score at each venue that has hosted at least three matches.")
 
-    col1, col2 = st.columns(2)
-    with col2:
-        st.markdown("**Avg 1st Innings Score by Venue**")
-        if "venue" in del_df.columns or "venue" in inn1.columns:
-            inn1v = inn1.merge(
-                final_matches[["match_id","venue"]].drop_duplicates(), on="match_id", how="left"
-            )
-            venue_avg = (
-                inn1v.groupby("venue")["runs"]
-                .agg(avg="mean", count="count")
-                .reset_index()
-            )
-            venue_avg = venue_avg[venue_avg["count"] >= 3].sort_values("avg", ascending=False)
-            venue_avg["avg"] = venue_avg["avg"].round(1)
-            fig_va = px.bar(venue_avg, x="venue", y="avg",
-                            color="avg",
-                            color_continuous_scale=["#1a3550","#f59e0b"],
-                            text="avg", title="Avg 1st Inn Score by Venue (min 3 matches)")
-            fig_va.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                  coloraxis_showscale=False,
-                                  plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-            fig_va.update_traces(textposition="outside")
-            st.plotly_chart(fig_va, use_container_width=True, key=_next_key())
+    if "venue" in del_df.columns or "venue" in inn1.columns:
+        inn1v = inn1.merge(
+            final_matches[["match_id","venue"]].drop_duplicates(), on="match_id", how="left"
+        )
+        venue_avg = (
+            inn1v.groupby("venue")["runs"]
+            .agg(avg="mean", count="count")
+            .reset_index()
+        )
+        venue_avg = venue_avg[venue_avg["count"] >= 3].sort_values("avg", ascending=False)
+        venue_avg["avg"] = venue_avg["avg"].round(1)
+        ui.show(ui.bar(venue_avg, "venue", "avg", horizontal=True,
+                       labels={"avg": "Average 1st innings score"}))
 
     # ── Season trends ─────────────────────────────────────────────────────────
     st.divider()
-    st.subheader("📅 Season-by-Season Trends")
+    ui.section("Season by season")
     if "season" in final_matches.columns:
         _sm = final_matches.set_index("match_id")["season"].to_dict()
         del_df["_s"] = del_df["match_id"].map(_sm)
@@ -1438,31 +1402,25 @@ with tab5:
         season_agg["avg_wkts"]  = (season_agg["wickets"] / season_agg["inn_count"]).round(2)
 
         col1, col2, col3 = st.columns(3)
+        _slabels = {"season": "Season", "avg_score": "Average score", "run_rate": "Run rate",
+                    "avg_wkts": "Wickets per innings"}
         with col1:
-            fig_sa = px.line(season_agg, x="season", y="avg_score", markers=True,
-                             color_discrete_sequence=["#1DB954"],
-                             title="Avg Innings Score per Season")
-            fig_sa.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white", xaxis_tickangle=-45)
-            st.plotly_chart(fig_sa, use_container_width=True, key=_next_key())
+            ui.show(ui.line(season_agg, "season", "avg_score", title="Average innings score",
+                            color=ui.AMBER, labels=_slabels, categorical_x=True))
         with col2:
-            fig_rrs = px.line(season_agg, x="season", y="run_rate", markers=True,
-                              color_discrete_sequence=["#00b4d8"],
-                              title="Run Rate per Season")
-            fig_rrs.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white", xaxis_tickangle=-45)
-            st.plotly_chart(fig_rrs, use_container_width=True, key=_next_key())
+            ui.show(ui.line(season_agg, "season", "run_rate", title="Run rate",
+                            color=ui.SKY, labels=_slabels, categorical_x=True))
         with col3:
-            fig_ws = px.line(season_agg, x="season", y="avg_wkts", markers=True,
-                             color_discrete_sequence=["#e63946"],
-                             title="Avg Wickets per Innings per Season")
-            fig_ws.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white", xaxis_tickangle=-45)
-            st.plotly_chart(fig_ws, use_container_width=True, key=_next_key())
+            ui.show(ui.line(season_agg, "season", "avg_wkts", title="Wickets per innings",
+                            color=ui.RED, labels=_slabels, categorical_x=True))
 
     st.download_button(
-        "⬇️ Download Phase Analysis CSV",
+        "Download phase analysis (CSV)",
         phase_agg.to_csv(index=False),
         file_name="league_phase_analysis.csv",
         key="dl_8",
         mime="text/csv",
+        icon=":material/download:",
     )
 
 
@@ -1540,64 +1498,61 @@ with tab5:
         t_inn = p_inn = bf = pd.DataFrame()
 
     st.divider()
-    col_l, col_r = st.columns(2)
+    ui.section("Records", "The best and worst days in your selection.")
+    col_l, col_r, col_l2, col_r2 = st.tabs(["Highest team totals", "Lowest team totals",
+                                             "Highest individual innings", "Best bowling figures"])
 
     # ── Highest Team Scores ───────────────────────────────────────────────────
     with col_l:
-        st.subheader("🏏 Top 10 Highest Team Scores")
         if not t_inn.empty:
             top_high = t_inn.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
             top_high.index += 1
-            st.dataframe(
+            ui.table(
                 top_high[["team","vs","season","date","venue","runs","balls","SR"]]
                 .rename(columns={"team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Score","balls":"Balls","SR":"SR"}),
-                use_container_width=True, height=380
+                height=400
             )
 
     # ── Lowest Team Scores ────────────────────────────────────────────────────
     with col_r:
-        st.subheader("📉 Top 10 Lowest Team Scores")
+        st.caption("Innings of 10 overs or more")
         if not t_inn.empty:
             top_low = t_inn[t_inn["balls"] >= 60].sort_values("runs", ascending=True).head(10).reset_index(drop=True)
             top_low.index += 1
-            st.dataframe(
+            ui.table(
                 top_low[["team","vs","season","date","venue","runs","balls","SR"]]
                 .rename(columns={"team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Score","balls":"Balls","SR":"SR"}),
-                use_container_width=True, height=380
+                height=400
             )
 
-    st.divider()
-    col_l2, col_r2 = st.columns(2)
 
     # ── Top 10 Individual Innings ─────────────────────────────────────────────
     with col_l2:
-        st.subheader("🌟 Top 10 Individual Innings")
         if not p_inn.empty:
             top_ind = p_inn.sort_values("runs", ascending=False).head(10).reset_index(drop=True)
             top_ind.index += 1
-            st.dataframe(
+            ui.table(
                 top_ind[["player","team","vs","season","date","venue","runs","balls","SR"]]
                 .rename(columns={"player":"Player","team":"Team","vs":"Vs","season":"Season","date":"Date","venue":"Venue","runs":"Runs","balls":"Balls","SR":"SR"}),
-                use_container_width=True, height=380
+                height=400
             )
 
     # ── Top 10 Bowling Figures ────────────────────────────────────────────────
     with col_r2:
-        st.subheader("🎳 Top 10 Bowling Figures")
         if not bf.empty:
             top_bf = bf.sort_values(["wickets","runs_given"], ascending=[False,True]).head(10).reset_index(drop=True)
             top_bf.index += 1
-            st.dataframe(
+            ui.table(
                 top_bf[["bowler","team","vs","season","date","venue","figure","wickets","runs_given","overs"]]
                 .rename(columns={"bowler":"Bowler","team":"Team","vs":"Vs","season":"Season",
                                   "date":"Date","venue":"Venue","figure":"Figure","wickets":"Wkts","runs_given":"Runs","overs":"Overs"}),
-                use_container_width=True, height=380
+                height=400
             )
 
 # TAB 6 — PLAYER PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
 with tab6:
-    st.subheader("👤 Player Profile")
+    ui.lede("Any player's full record within your filters.")
 
     # Precompute ALL player profiles once — cached by data size so recomputes
     # only when filters change. Individual lookups are then instant (dict key).
@@ -1633,22 +1588,24 @@ with tab6:
         col_search, col_role = st.columns([3, 1])
         with col_search:
             selected_player = st.selectbox(
-                "🔍 Search Player",
+                "Player",
                 options=[None] + all_players,
-                format_func=lambda x: "— Type or select a player —" if x is None else x,
+                format_func=lambda x: "Type a name or pick from the list" if x is None else x,
                 index=0,
             )
         with col_role:
-            show_role = st.radio("Show Stats For", ["Both", "Batting Only", "Bowling Only"], horizontal=True)
+            show_role = st.segmented_control(
+                "Show", ["Both", "Batting Only", "Bowling Only"], default="Both", key="profile_role",
+                format_func=lambda x: {"Both": "Both", "Batting Only": "Batting", "Bowling Only": "Bowling"}[x],
+            ) or "Both"
 
         if selected_player is None:
-            st.info("👆 Select a player above to view their full profile.")
+            st.info(f"Choose one of {len(all_players):,} players above to open their profile.")
         else:
             # Instant lookup — no computation needed
             profile = all_profiles.get(selected_player, {})
 
-            st.markdown(f"## 🏏 {selected_player}")
-            st.markdown("---")
+            ui.player_name(selected_player)
 
             bat  = profile.get("batting")
             bowl = profile.get("bowling")
@@ -1657,11 +1614,11 @@ with tab6:
             # ── MOM Banner ────────────────────────────────────────────────────
             mom_total = mom.get("total", 0)
             if mom_total > 0:
-                st.success(f"🏅 **Player of the Match Awards: {mom_total}**")
+                ui.callout(mom_total, f"player of the match award{'s' if mom_total != 1 else ''}")
 
             # ── BATTING SECTION ───────────────────────────────────────────────
             if show_role in ("Both", "Batting Only"):
-                st.subheader("🏏 Batting")
+                ui.section("Batting")
 
                 if bat:
                     # KPIs
@@ -1670,8 +1627,8 @@ with tab6:
                     c2.metric("Runs",         bat["runs"])
                     c3.metric("Highest",      bat["highest"])
                     c4.metric("Average",      bat["average"])
-                    c5.metric("Strike Rate",  bat["strike_rate"])
-                    c6.metric("Not Outs",     bat["not_outs"])
+                    c5.metric("Strike rate",  bat["strike_rate"])
+                    c6.metric("Not outs",     bat["not_outs"])
 
                     c7, c8, c9, c10 = st.columns(4)
                     c7.metric("100s",         bat["hundreds"])
@@ -1681,7 +1638,7 @@ with tab6:
 
                     # ── Batting Position Breakdown ────────────────────────
                     if show_role in ("Batting Only",):
-                        st.subheader("📊 Stats by Batting Position")
+                        ui.subsection("By batting position")
                         pos_stats = bat.get("position_stats", pd.DataFrame())
                         if not pos_stats.empty:
                             pos_stats.index = pos_stats["position"]
@@ -1696,82 +1653,49 @@ with tab6:
                             })
                             col_pos1, col_pos2 = st.columns([2, 2])
                             with col_pos1:
-                                st.caption("Stats computed only from innings batted at each position")
-                                st.dataframe(pos_display, use_container_width=True, height=350)
+                                st.caption("Only innings batted at each position count")
+                                ui.table(pos_display, height=350)
                             with col_pos2:
-                                import plotly.express as px
-                                fig_pos = px.bar(
-                                    pos_stats, x="position", y="runs",
-                                    color="average",
-                                    color_continuous_scale=["#1a3550","#1DB954"],
-                                    text="runs",
-                                    title="Runs by Batting Position",
-                                    labels={"position":"Position","runs":"Runs","average":"Avg"},
-                                    category_orders={"position": sorted(pos_stats["position"].tolist())},
-                                )
-                                fig_pos.update_layout(
-                                    plot_bgcolor="rgba(0,0,0,0)",
-                                    paper_bgcolor="rgba(0,0,0,0)",
-                                    font_color="white",
-                                    xaxis=dict(tickmode="linear", dtick=1),
-                                )
-                                fig_pos.update_traces(textposition="outside")
-                                st.plotly_chart(fig_pos, use_container_width=True, key=_next_key())
-
-                                # SR by position
-                                fig_sr = px.bar(
-                                    pos_stats, x="position", y="strike_rate",
-                                    color="strike_rate",
-                                    color_continuous_scale=["#1a3550","#00b4d8"],
-                                    text="strike_rate",
-                                    title="Strike Rate by Batting Position",
-                                    labels={"position":"Position","strike_rate":"SR"},
-                                )
-                                fig_sr.update_layout(
-                                    plot_bgcolor="rgba(0,0,0,0)",
-                                    paper_bgcolor="rgba(0,0,0,0)",
-                                    font_color="white",
-                                    xaxis=dict(tickmode="linear", dtick=1),
-                                )
-                                fig_sr.update_traces(textposition="outside")
-                                st.plotly_chart(fig_sr, use_container_width=True, key=_next_key())
+                                _pos_sorted = pos_stats.sort_values("position")
+                                ui.show(ui.bar(_pos_sorted, "position", "runs", title="Runs at each position",
+                                               height=300, labels={"position": "Position"}))
+                                ui.show(ui.bar(_pos_sorted, "position", "strike_rate",
+                                               title="Strike rate at each position", color=ui.SKY,
+                                               height=300, labels={"position": "Position"}))
                         else:
-                            st.info("No position data available.")
+                            st.info("There's no batting-position data for this player in your selection.")
 
                     # Win / Loss split
-                    st.markdown("#### 📊 Runs in Wins vs Losses")
                     wl_df = pd.DataFrame({
                         "Result": ["Wins", "Losses"],
                         "Runs":   [bat["runs_in_wins"], bat["runs_in_losses"]],
                     })
-                    import plotly.express as px
-                    fig_wl = px.bar(wl_df, x="Result", y="Runs", color="Result",
-                                    color_discrete_map={"Wins": "#1DB954", "Losses": "#e63946"},
-                                    text="Runs")
-                    fig_wl.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                                         paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    fig_wl.update_traces(textposition="outside")
-                    st.plotly_chart(fig_wl, use_container_width=True, key=_next_key())
 
                     # Runs vs each team + venue
                     # ── Top 10 Innings ────────────────────────────────────
-                    st.subheader("🏆 Top 10 Innings")
-                    top_inn = bat.get("top_innings", pd.DataFrame())
-                    if not top_inn.empty:
-                        top_inn.index += 1
-                        st.dataframe(top_inn, use_container_width=True, height=380)
-                    else:
-                        st.info("No innings data available.")
+                    inn_l, inn_r = st.columns([3, 1])
+                    with inn_l:
+                        ui.subsection("Ten best innings")
+                        top_inn = bat.get("top_innings", pd.DataFrame())
+                        if not top_inn.empty:
+                            top_inn = top_inn.copy()
+                            top_inn.index = range(1, len(top_inn) + 1)
+                            ui.table(top_inn, height=400)
+                        else:
+                            st.info("No innings to list for this player in your selection.")
+                    with inn_r:
+                        ui.subsection("Runs in wins and losses")
+                        ui.show(ui.bar(wl_df, "Result", "Runs", colors=[ui.WIN, ui.LOSS], height=400))
 
                     # ── Partnership Analysis ──────────────────────────────
-                    st.subheader("🤝 Partnership Analysis")
+                    ui.subsection("Partnerships")
                     partnerships = bat.get("partnerships", pd.DataFrame())
                     if not partnerships.empty:
                         # Min runs filter
                         p_col1, p_col2 = st.columns([1, 3])
                         with p_col1:
                             min_p_runs = st.number_input(
-                                "Min Total Runs together",
+                                "Minimum runs together",
                                 min_value=0, value=50, step=10,
                                 key="min_p_runs"
                             )
@@ -1785,174 +1709,120 @@ with tab6:
 
                         col_p1, col_p2 = st.columns([2, 1])
                         with col_p1:
-                            st.caption(f"{len(p_filtered)} partners with ≥ {min_p_runs} runs together — sorted by Avg ↓")
-                            st.dataframe(
+                            st.caption(f"{len(p_filtered)} partners with {min_p_runs}+ runs together, highest average first")
+                            ui.table(
                                 p_filtered.rename(columns={
                                     "partner":      "Partner",
                                     "partnerships": "Innings",
                                     "total_runs":   "Total Runs",
-                                    "avg":          "Avg ↓",
-                                    "best":         "Best Stand",
+                                    "avg":          "Average",
+                                    "best":         "Best stand",
                                     "sr":           "SR",
                                 }),
-                                use_container_width=True,
-                                height=400,
+                                height=420,
+                                bar="Average",
                             )
                         with col_p2:
-                            import plotly.express as px
                             top_p = p_filtered.head(10).copy()
-                            fig_p = px.bar(
-                                top_p, x="partner", y="avg",
-                                color="avg",
-                                color_continuous_scale=["#1a3550","#1DB954"],
-                                text="avg",
-                                title="Top 10 by Avg",
-                                labels={"partner":"Partner","avg":"Avg"},
-                            )
-                            fig_p.update_layout(
-                                showlegend=False, xaxis_tickangle=-35,
-                                plot_bgcolor="rgba(0,0,0,0)",
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                font_color="white",
-                                coloraxis_showscale=False,
-                            )
-                            fig_p.update_traces(textposition="outside")
-                            st.plotly_chart(fig_p, use_container_width=True, key=_next_key())
+                            ui.show(ui.bar(top_p, "partner", "avg", title="Best average stands",
+                                           horizontal=True, height=420, labels={"avg": "Average"}))
                     else:
-                        st.info("No partnership data available.")
+                        st.info("No partnerships to show for this player in your selection.")
 
                     col_a, col_b = st.columns(2)
                     with col_a:
-                        st.markdown("#### 🆚 Runs vs Each Team")
                         vs = bat["vs_team"]
                         if not vs.empty:
-                            fig_vt = px.bar(vs, x="opponent", y="runs", color="opponent",
-                                            text="runs", color_discrete_sequence=px.colors.qualitative.Bold)
-                            fig_vt.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                                 plot_bgcolor="rgba(0,0,0,0)",
-                                                 paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                            fig_vt.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vt, use_container_width=True, key=_next_key())
+                            ui.show(ui.bar(vs, "opponent", "runs", title="Runs against each team", horizontal=True))
                         else:
-                            st.info("No data.")
+                            st.info("No runs against any team in your selection.")
 
                     with col_b:
-                        st.markdown("#### 📍 Runs at Each Venue")
                         vv = bat["vs_venue"]
                         if not vv.empty:
-                            fig_vv = px.bar(vv, x="venue", y="runs", color="venue",
-                                            text="runs", color_discrete_sequence=px.colors.qualitative.Pastel)
-                            fig_vv.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                                 plot_bgcolor="rgba(0,0,0,0)",
-                                                 paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                            fig_vv.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vv, use_container_width=True, key=_next_key())
+                            ui.show(ui.bar(vv, "venue", "runs", title="Runs at each venue", horizontal=True,
+                                           color=ui.SKY))
                         else:
-                            st.info("No data.")
+                            st.info("No runs at any venue in your selection.")
                 else:
-                    st.info(f"{selected_player} has no batting records in the selected data.")
+                    st.info(f"{selected_player} hasn't batted in the matches you've selected.")
 
             # ── BOWLING SECTION ───────────────────────────────────────────────
             if show_role in ("Both", "Bowling Only"):
-                st.subheader("🎳 Bowling")
+                st.divider()
+                ui.section("Bowling")
 
                 if bowl:
                     c1, c2, c3, c4, c5 = st.columns(5)
                     c1.metric("Overs",      bowl["overs"])
                     c2.metric("Wickets",    bowl["wickets"])
-                    c3.metric("Runs Given", bowl["runs_given"])
+                    c3.metric("Runs conceded", bowl["runs_given"])
                     c4.metric("Economy",    bowl["economy"])
                     c5.metric("Average",    bowl["average"] if bowl["average"] else "—")
 
                     # Win / Loss wicket split
-                    st.markdown("#### 📊 Wickets in Wins vs Losses")
                     wl_bowl = pd.DataFrame({
                         "Result":  ["Wins", "Losses"],
                         "Wickets": [bowl["wickets_in_wins"], bowl["wickets_in_losses"]],
                     })
-                    import plotly.express as px
-                    fig_wlb = px.bar(wl_bowl, x="Result", y="Wickets", color="Result",
-                                     color_discrete_map={"Wins": "#1DB954", "Losses": "#e63946"},
-                                     text="Wickets")
-                    fig_wlb.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                                          paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                    fig_wlb.update_traces(textposition="outside")
-                    st.plotly_chart(fig_wlb, use_container_width=True, key=_next_key())
 
                     # ── Top 10 Bowling Figures ────────────────────────────
-                    st.subheader("🏆 Top 10 Bowling Figures")
-                    top_fig = bowl.get("top_figures", pd.DataFrame())
-                    if not top_fig.empty:
-                        top_fig.index += 1
-                        st.dataframe(top_fig, use_container_width=True, height=380)
-                    else:
-                        st.info("No bowling figures data available.")
+                    bf_l, bf_r = st.columns([3, 1])
+                    with bf_l:
+                        ui.subsection("Ten best bowling figures")
+                        top_fig = bowl.get("top_figures", pd.DataFrame())
+                        if not top_fig.empty:
+                            top_fig = top_fig.copy()
+                            top_fig.index = range(1, len(top_fig) + 1)
+                            ui.table(top_fig, height=400)
+                        else:
+                            st.info("No bowling figures for this player in your selection.")
+                    with bf_r:
+                        ui.subsection("Wickets in wins and losses")
+                        ui.show(ui.bar(wl_bowl, "Result", "Wickets", colors=[ui.WIN, ui.LOSS], height=400))
 
                     col_a, col_b = st.columns(2)
                     with col_a:
-                        st.markdown("#### 🆚 Wickets vs Each Team")
                         vt_b = bowl["vs_team"]
                         if not vt_b.empty:
-                            fig_vtb = px.bar(vt_b, x="opponent", y="wickets", color="opponent",
-                                             text="wickets", color_discrete_sequence=px.colors.qualitative.Bold)
-                            fig_vtb.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                                  plot_bgcolor="rgba(0,0,0,0)",
-                                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                            fig_vtb.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vtb, use_container_width=True, key=_next_key())
+                            ui.show(ui.bar(vt_b, "opponent", "wickets", title="Wickets against each team",
+                                           horizontal=True, color=ui.VIOLET))
                         else:
-                            st.info("No data.")
+                            st.info("No wickets against any team in your selection.")
 
                     with col_b:
-                        st.markdown("#### 📍 Wickets at Each Venue")
                         vv_b = bowl["vs_venue"]
                         if not vv_b.empty:
-                            fig_vvb = px.bar(vv_b, x="venue", y="wickets", color="venue",
-                                             text="wickets", color_discrete_sequence=px.colors.qualitative.Pastel)
-                            fig_vvb.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                                  plot_bgcolor="rgba(0,0,0,0)",
-                                                  paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                            fig_vvb.update_traces(textposition="outside")
-                            st.plotly_chart(fig_vvb, use_container_width=True, key=_next_key())
+                            ui.show(ui.bar(vv_b, "venue", "wickets", title="Wickets at each venue",
+                                           horizontal=True, color=ui.SKY))
                         else:
-                            st.info("No data.")
+                            st.info("No wickets at any venue in your selection.")
                 else:
-                    st.info(f"{selected_player} has no bowling records in the selected data.")
+                    st.info(f"{selected_player} hasn't bowled in the matches you've selected.")
 
             # ── MAN OF MATCH SECTION ──────────────────────────────────────────
-            st.subheader("🏅 Player of the Match")
+            st.divider()
+            ui.section("Player of the match")
 
             if mom_total == 0:
-                st.info(f"{selected_player} has no Player of the Match awards in the selected data.")
+                st.info(f"{selected_player} hasn't won player of the match in the matches you've selected.")
             else:
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.markdown("#### 🆚 MOM Awards vs Each Team")
                     mom_team = mom.get("vs_team", pd.DataFrame())
                     if not mom_team.empty:
-                        fig_mt = px.bar(mom_team, x="opponent", y="mom_awards", color="opponent",
-                                        text="mom_awards",
-                                        color_discrete_sequence=px.colors.qualitative.Bold)
-                        fig_mt.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                             plot_bgcolor="rgba(0,0,0,0)",
-                                             paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                        fig_mt.update_traces(textposition="outside")
-                        st.plotly_chart(fig_mt, use_container_width=True, key=_next_key())
+                        ui.show(ui.bar(mom_team, "opponent", "mom_awards", title="Awards against each team",
+                                       horizontal=True))
 
                 with col_b:
-                    st.markdown("#### 📍 MOM Awards at Each Venue")
                     mom_venue = mom.get("vs_venue", pd.DataFrame())
                     if not mom_venue.empty:
-                        fig_mv = px.bar(mom_venue, x="venue", y="mom_awards", color="venue",
-                                        text="mom_awards",
-                                        color_discrete_sequence=px.colors.qualitative.Pastel)
-                        fig_mv.update_layout(showlegend=False, xaxis_tickangle=-35,
-                                             plot_bgcolor="rgba(0,0,0,0)",
-                                             paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-                        fig_mv.update_traces(textposition="outside")
-                        st.plotly_chart(fig_mv, use_container_width=True, key=_next_key())
+                        ui.show(ui.bar(mom_venue, "venue", "mom_awards", title="Awards at each venue",
+                                       horizontal=True, color=ui.SKY))
 
-                st.markdown("#### 📋 All MOM Matches")
+                ui.subsection("Every award")
                 mom_matches_df = mom.get("matches", pd.DataFrame())
                 if not mom_matches_df.empty:
-                    st.dataframe(mom_matches_df.reset_index(drop=True), use_container_width=True)
+                    ui.table(mom_matches_df.reset_index(drop=True), hide_index=True)
+
+ui.footer()
