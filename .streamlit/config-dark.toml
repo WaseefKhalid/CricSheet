@@ -1,0 +1,64 @@
+# ── Waseef Analytical Portal — "Floodlit" NIGHT theme ───────────────────────
+# Streamlit only reads config.toml. To switch the site to the night theme,
+# rename this file to config.toml (and the white one to config-light.toml).
+# The CSS and charts in components/theme.py follow `base` automatically.
+
+[server]
+maxUploadSize = 500
+enableStaticServing = true
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#F2A541"
+backgroundColor = "#0E1528"
+secondaryBackgroundColor = "#141C33"
+textColor = "#EEE9DD"
+linkColor = "#F2A541"
+linkUnderline = false
+borderColor = "#253052"
+dataframeBorderColor = "#1E2846"
+dataframeHeaderBackgroundColor = "#18213C"
+dataframeHeaderTextColor = "#B9BFD0"
+showWidgetBorder = true
+baseRadius = "8px"
+buttonRadius = "8px"
+baseFontSize = 15
+font = "Instrument Sans, system-ui, sans-serif"
+headingFont = "Big Shoulders Display, Instrument Sans, sans-serif"
+headingFontWeights = [800, 700, 700, 700, 600, 600]
+metricValueFontSize = "2.4rem"
+metricValueFontWeight = 700
+redColor = "#DD4B57"
+orangeColor = "#F2A541"
+blueColor = "#3F8FE0"
+violetColor = "#9B7BEA"
+chartCategoricalColors = ["#D07E22", "#3F8FE0", "#DD4B57", "#9B7BEA"]
+
+[[theme.fontFaces]]
+family = "Instrument Sans"
+url = "app/static/fonts/InstrumentSans-Variable.woff2"
+weight = "400 700"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Big Shoulders Display"
+url = "app/static/fonts/BigShouldersDisplay-600.woff2"
+weight = 600
+
+[[theme.fontFaces]]
+family = "Big Shoulders Display"
+url = "app/static/fonts/BigShouldersDisplay-700.woff2"
+weight = 700
+
+[[theme.fontFaces]]
+family = "Big Shoulders Display"
+url = "app/static/fonts/BigShouldersDisplay-800.woff2"
+weight = 800
+
+[theme.sidebar]
+backgroundColor = "#0A1022"
+secondaryBackgroundColor = "#141C33"
+borderColor = "#253052"
