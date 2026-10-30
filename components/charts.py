@@ -1,8 +1,12 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
+"""Reusable league charts, styled with the Floodlit theme (components/theme.py).
 
-COLORS = px.colors.qualitative.Bold
+Function names and arguments are unchanged from the original module.
+"""
+
+import pandas as pd
+import streamlit as st
+
+from components import theme as ui
 
 
 def _safe_merge_season(deliveries: pd.DataFrame, matches: pd.DataFrame) -> pd.DataFrame:
@@ -15,14 +19,13 @@ def _safe_merge_season(deliveries: pd.DataFrame, matches: pd.DataFrame) -> pd.Da
 
 
 def plot_runs_per_season(deliveries: pd.DataFrame, matches: pd.DataFrame):
-    st.markdown("**Total Runs per Season**")
     if deliveries.empty or matches.empty:
-        st.info("No data available.")
+        st.info("No matches in your selection.")
         return
     try:
         merged = _safe_merge_season(deliveries, matches)
         if "season" not in merged.columns:
-            st.info("Season data not available.")
+            st.info("This data has no season column.")
             return
         merged["total_ball_runs"] = merged["runs_off_bat"].fillna(0) + merged["extras"].fillna(0)
         runs = (
@@ -33,25 +36,19 @@ def plot_runs_per_season(deliveries: pd.DataFrame, matches: pd.DataFrame):
             .sort_values("season")
         )
         runs["total_runs"] = runs["total_runs"].astype(int)
-        fig = px.bar(runs, x="season", y="total_runs", color="season",
-                     color_discrete_sequence=COLORS, text="total_runs")
-        fig.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)",
-                          paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig.update_traces(textposition="outside")
-        st.plotly_chart(fig, use_container_width=True)
+        ui.show(ui.bar(runs, "season", "total_runs", title="Runs per season"))
     except Exception as e:
-        st.warning(f"Could not render runs per season chart: {e}")
+        st.warning(f"Couldn't draw the runs-per-season chart: {e}")
 
 
 def plot_wickets_per_season(deliveries: pd.DataFrame, matches: pd.DataFrame):
-    st.markdown("**Total Wickets per Season**")
     if deliveries.empty or matches.empty:
-        st.info("No data available.")
+        st.info("No matches in your selection.")
         return
     try:
         merged = _safe_merge_season(deliveries, matches)
         if "season" not in merged.columns:
-            st.info("Season data not available.")
+            st.info("This data has no season column.")
             return
         wickets_df = merged[
             merged["wicket_type"].notna() & (merged["wicket_type"].astype(str).str.strip() != "")
@@ -61,81 +58,62 @@ def plot_wickets_per_season(deliveries: pd.DataFrame, matches: pd.DataFrame):
             .reset_index(name="wickets")
             .sort_values("season")
         )
-        fig = px.line(wickets, x="season", y="wickets", markers=True,
-                      color_discrete_sequence=["#00b4d8"])
-        fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig, use_container_width=True)
+        ui.show(ui.line(wickets, "season", "wickets", title="Wickets per season",
+                        color=ui.RED, categorical_x=True))
     except Exception as e:
-        st.warning(f"Could not render wickets per season chart: {e}")
+        st.warning(f"Couldn't draw the wickets-per-season chart: {e}")
 
 
 def plot_win_by_method(matches: pd.DataFrame):
-    st.markdown("**Win Method Distribution**")
     if matches.empty:
-        st.info("No data available.")
+        st.info("No matches in your selection.")
         return
     try:
         df = matches.copy()
-        df["method"] = "By Runs"
+        df["method"] = "By runs"
         if "winner_wickets" in df.columns:
             df["winner_wickets"] = pd.to_numeric(df["winner_wickets"], errors="coerce")
-            df.loc[df["winner_wickets"].notna() & (df["winner_wickets"] > 0), "method"] = "By Wickets"
+            df.loc[df["winner_wickets"].notna() & (df["winner_wickets"] > 0), "method"] = "By wickets"
         if "winner" in df.columns:
-            df.loc[df["winner"].isna() | (df["winner"].astype(str).str.strip() == ""), "method"] = "No Result"
+            df.loc[df["winner"].isna() | (df["winner"].astype(str).str.strip() == ""), "method"] = "No result"
         counts = df["method"].value_counts().reset_index()
         counts.columns = ["method", "count"]
-        fig = px.pie(counts, names="method", values="count",
-                     color_discrete_sequence=COLORS, hole=0.4)
-        fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig, use_container_width=True)
+        ui.show(ui.donut(counts, "method", "count", title="How matches were won"))
     except Exception as e:
-        st.warning(f"Could not render win method chart: {e}")
+        st.warning(f"Couldn't draw the win-method chart: {e}")
 
 
 def plot_toss_impact(matches: pd.DataFrame):
-    st.markdown("**Toss Decision Frequency**")
     if matches.empty or "toss_decision" not in matches.columns:
-        st.info("No data available.")
+        st.info("No toss data in your selection.")
         return
     try:
         counts = matches["toss_decision"].dropna().value_counts().reset_index()
         counts.columns = ["decision", "count"]
-        fig = px.pie(counts, names="decision", values="count",
-                     color_discrete_sequence=["#1DB954", "#00b4d8"], hole=0.4)
-        fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        st.plotly_chart(fig, use_container_width=True)
+        ui.show(ui.donut(counts, "decision", "count", title="Toss decisions", colors=[ui.AMBER, ui.SKY]))
     except Exception as e:
-        st.warning(f"Could not render toss chart: {e}")
+        st.warning(f"Couldn't draw the toss chart: {e}")
 
 
 def plot_top_batsmen(df: pd.DataFrame, x: str, y: str, title: str):
     if df.empty:
-        st.info("No data available.")
+        st.info("No batters in your selection.")
         return
     try:
         top = df.head(10).copy()
         top[y] = pd.to_numeric(top[y], errors="coerce").fillna(0)
-        fig = px.bar(top, x=x, y=y, color=x, text=y,
-                     color_discrete_sequence=COLORS, title=title)
-        fig.update_layout(showlegend=False, xaxis_tickangle=-35,
-                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig.update_traces(textposition="outside")
-        st.plotly_chart(fig, use_container_width=True)
+        ui.show(ui.bar(top, x, y, title=title, horizontal=True))
     except Exception as e:
-        st.warning(f"Could not render chart: {e}")
+        st.warning(f"Couldn't draw the chart: {e}")
 
 
 def plot_top_bowlers(df: pd.DataFrame):
     if df.empty:
-        st.info("No data available.")
+        st.info("No bowlers in your selection.")
         return
     try:
         top = df.head(10).copy()
-        fig = px.bar(top, x="player", y="wickets", color="player", text="wickets",
-                     color_discrete_sequence=COLORS, title="Top 10 Wicket Takers")
-        fig.update_layout(showlegend=False, xaxis_tickangle=-35,
-                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="white")
-        fig.update_traces(textposition="outside")
-        st.plotly_chart(fig, use_container_width=True)
+        ui.show(ui.bar(top, "player", "wickets", title="Top 10 wicket takers",
+                       horizontal=True, color=ui.VIOLET))
     except Exception as e:
-        st.warning(f"Could not render bowlers chart: {e}")
+        st.warning(f"Couldn't draw the bowlers chart: {e}")
